@@ -1,0 +1,38 @@
+# Temporary planning and scratch files
+/temp/
+
+# Local environment and secrets
+.env
+.env.*
+!.env.example
+.venv/
+venv/
+
+# Python caches and build artifacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# Local data artifacts
+/data/raw/*
+!/data/raw/.gitkeep
+/data/bronze/
+/data/silver/
+/data/gold/
+
+# Local Spark and Databricks state
+/spark-warehouse/
+/metastore_db/
+/.databricks/
+
+# Editors and operating systems
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db
