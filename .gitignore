@@ -32,6 +32,7 @@ dist/
 /.tools/
 /spark-warehouse/
 /.spark-local/
+/.spark-tmp/
 /metastore_db/
 /.databricks/
 

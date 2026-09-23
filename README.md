@@ -11,7 +11,7 @@ project.
 
 ## Current status
 
-Phase 4 (Bronze Delta) is complete. The repository currently contains:
+Phase 5 (Silver) is complete. The repository currently contains:
 
 - the inspected AES 2025 provisional CSV in the local `data/raw/` directory;
 - documented dataset findings and limitations;
@@ -21,10 +21,11 @@ Phase 4 (Bronze Delta) is complete. The repository currently contains:
 - an idempotent local ingestion manifest keyed by source SHA-256;
 - a PySpark Bronze writer that preserves all raw fields and attaches lineage;
 - an idempotent Delta table keyed logically by source SHA-256;
-- empty validation, transformation, API, and deployment boundaries for later phases.
+- a typed, validated, one-row-in/one-row-out Silver Delta snapshot;
+- reserved API and deployment boundaries for later phases.
 
-No Silver validation, business transformation, business-metric implementation,
-API, or deployment workflow has been implemented yet.
+No business-metric calculation, Gold processing, API, or deployment workflow has
+been implemented yet. The broader quality framework remains a later phase.
 
 ## Business questions
 
@@ -126,6 +127,25 @@ python scripts/verify_bronze.py
 It reads the Delta table and reports its row count, exact column contract,
 source-column types, `C`/`S` counts, and distinct ingestion metadata.
 
+## Silver processing
+
+Run the Bronze-only Silver transformation with:
+
+```powershell
+python -m nz_industry_benchmarking.silver
+```
+
+Silver parses year and numeric values, preserves raw values and labels,
+classifies `C`, `S`, unavailable, and invalid states, and attaches inspectable
+validation outcomes. Every Bronze row remains present. Reprocessing the same set
+of Bronze artifacts verifies and skips the existing logical snapshot.
+
+The default output is `data/silver/aes_observations`. Verify it with:
+
+```powershell
+python scripts/verify_silver.py
+```
+
 ## Planned architecture
 
 ```text
@@ -181,6 +201,7 @@ ruff check .
 |   |-- api/
 |   |-- bronze/
 |   |-- ingestion/
+|   |-- silver/
 |   |-- transformation/
 |   `-- validation/
 |-- tests/

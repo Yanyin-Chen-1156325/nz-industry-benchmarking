@@ -1,6 +1,6 @@
 # Architecture
 
-## Implemented ingestion and Bronze boundaries
+## Implemented ingestion, Bronze, and Silver boundaries
 
 Phase 3 implements only the raw-file ingestion boundary:
 
@@ -23,6 +23,12 @@ Raw-string PySpark DataFrame
         |
         v
  Bronze Delta table
+        |
+        v
+Typed and validated PySpark transformation
+        |
+        v
+ Silver Delta table
 ```
 
 The loader verifies that the file exists and that its header matches the source
@@ -52,12 +58,26 @@ preserves row-level lineage even if two raw rows contain identical values. The
 Bronze data, Delta log, ingestion manifest, and source CSV are local generated
 artifacts and are excluded from Git.
 
+Phase 5 reads only the implemented Bronze Delta table. It validates the exact
+Bronze column/type contract, converts the year and published numeric values to
+logical types, classifies protected and unusable values, and validates source
+metadata and observation identity. It does not reopen the CSV.
+
+Every Bronze row produces one Silver row. Invalid or unavailable records remain
+in `data/silver/aes_observations` with stable `record_id`, validation rule IDs,
+failure reasons, and Bronze lineage. No invalid row is silently filtered.
+
+The sorted set of Bronze ingestion identities produces a deterministic Silver
+input fingerprint. The Silver table is a complete snapshot: a new fingerprint
+overwrites the prior logical snapshot, while the same fingerprint is verified
+and skipped. Delta transaction identity provides retry protection.
+
 The command emits structured JSON events for start, source load, successful
 registration, duplicate detection, and failure. Runtime settings come from
 environment variables, CLI arguments, or documented defaults.
 
 ## Not implemented
 
-Silver validation and transformation, Gold processing, metric calculation,
+The broader Phase 6 quality framework, Gold processing, metric calculation,
 APIs, Databricks jobs, and deployment workflows remain outside the implemented
 architecture and require approval in their respective phases.

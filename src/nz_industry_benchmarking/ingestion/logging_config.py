@@ -22,6 +22,9 @@ STRUCTURED_FIELDS = (
     "bronze_path",
     "inserted_rows",
     "total_rows",
+    "silver_path",
+    "valid_rows",
+    "invalid_rows",
 )
 
 
