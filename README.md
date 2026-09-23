@@ -11,16 +11,20 @@ project.
 
 ## Current status
 
-Phase 2 (project foundation) is complete. The repository currently contains:
+Phase 4 (Bronze Delta) is complete. The repository currently contains:
 
 - the inspected AES 2025 provisional CSV in the local `data/raw/` directory;
 - documented dataset findings and limitations;
 - approved MVP business rules;
 - Python packaging, pytest, and Ruff configuration;
-- empty source and deployment boundaries for later phases.
+- a repeatable raw CSV ingestion command with structured JSON logs;
+- an idempotent local ingestion manifest keyed by source SHA-256;
+- a PySpark Bronze writer that preserves all raw fields and attaches lineage;
+- an idempotent Delta table keyed logically by source SHA-256;
+- empty validation, transformation, API, and deployment boundaries for later phases.
 
-No ingestion pipeline, medallion tables, business-metric implementation, API,
-or deployment workflow has been implemented yet.
+No Silver validation, business transformation, business-metric implementation,
+API, or deployment workflow has been implemented yet.
 
 ## Business questions
 
@@ -48,6 +52,80 @@ confidentiality markers, and limitations. See
 The CSV is intentionally ignored by Git. Download it from the official URL in
 `.env.example` and place it at the configured `AES_SOURCE_FILE` path.
 
+## Raw ingestion
+
+Run the Phase 3 ingestion command from the repository root:
+
+```powershell
+python -m nz_industry_benchmarking.ingestion
+```
+
+The command:
+
+- reads the configured AES CSV as UTF-8 CSV;
+- enforces the Phase 0 header contract;
+- preserves every source field, including `Value`, as text;
+- calculates the exact source-file SHA-256;
+- records source, dataset, row-count, timestamp, and schema metadata;
+- emits structured JSON logs;
+- writes one logical record per source artifact to
+  `data/ingestion/manifest.json`.
+
+The manifest and CSV are local artifacts and are ignored by Git. Re-running the
+command for the same source hash returns `status: duplicate`, retains the first
+logical ingestion timestamp, and does not add another manifest record.
+
+Defaults come from the values documented in `.env.example`. Settings can be
+exported as environment variables or overridden with CLI options; use
+`python -m nz_industry_benchmarking.ingestion --help` for the complete list.
+The project does not automatically parse a local `.env` file and therefore does
+not require a dotenv runtime dependency.
+
+## Bronze Delta
+
+Install Java 17 or newer, set `JAVA_HOME`, and run from the repository root:
+
+```powershell
+python -m nz_industry_benchmarking.bronze
+```
+
+The command uses the approved ingestion output as its source boundary, creates a
+PySpark DataFrame with every source column kept as a string, adds ingestion and
+row-lineage metadata, and writes Delta format to `data/bronze/aes` by default.
+Re-running the same source SHA-256 reports `duplicate: true`, inserts zero rows,
+and verifies that the previously stored logical ingestion is complete.
+
+Python 3.11+ is supported. Phase 4 pins PySpark 4.2.0 and Delta Lake 4.4.0 because
+those releases are mutually compatible and support the project's local Python
+3.13 environment. Spark 4.2 requires Java 17 or newer. No Pandas or PyArrow extras
+are needed for this row-preserving Bronze implementation.
+
+Configuration is available through the variables in `.env.example` or CLI
+arguments; use `python -m nz_industry_benchmarking.bronze --help` for details.
+The local source, ingestion manifest, Bronze table, and `.tools` directory are
+ignored by Git.
+
+Delta normally resolves its JVM artifacts from Maven on first use. In an offline
+or certificate-intercepted environment, `DELTA_SPARK_LOCAL_JARS` can point to an
+isolated directory containing compatible Delta runtime JARs; it is not needed in
+a normal environment. Do not point it at a broad dependency cache containing
+conflicting Spark libraries.
+
+Native Windows local-file Delta writes also require Hadoop's Windows native
+runtime (`winutils.exe`). This repository's Phase 4 Delta write and tests were
+verified with Ubuntu WSL instead, using the same project code and an isolated
+Java/Python environment. Linux and Databricks do not have the Windows-specific
+`winutils.exe` requirement.
+
+After writing Bronze, the implemented verification command is:
+
+```powershell
+python scripts/verify_bronze.py
+```
+
+It reads the Delta table and reports its row count, exact column contract,
+source-column types, `C`/`S` counts, and distinct ingestion metadata.
+
 ## Planned architecture
 
 ```text
@@ -62,12 +140,12 @@ Python ingestion -> Bronze Delta -> PySpark validation -> Silver Delta
                                                        SQL       API
 ```
 
-These components are architectural targets only. They will be implemented and
-verified phase by phase.
+Ingestion and Bronze Delta are implemented. Components after Bronze remain
+architectural targets and will be implemented phase by phase.
 
 ## Local setup
 
-Python 3.11 or newer is required.
+Python 3.11 or newer and Java 17 or newer are required.
 
 ```powershell
 python -m venv .venv
@@ -77,8 +155,8 @@ python -m pip install -e ".[dev]"
 Copy-Item .env.example .env
 ```
 
-Only development tooling is installed at this stage. Runtime dependencies will
-be added when a phase introduces code that requires them.
+Runtime dependencies are limited to PySpark and Delta Lake. Development tooling
+is installed through the `dev` extra.
 
 ## Verification
 
@@ -101,6 +179,7 @@ ruff check .
 |-- scripts/
 |-- src/nz_industry_benchmarking/
 |   |-- api/
+|   |-- bronze/
 |   |-- ingestion/
 |   |-- transformation/
 |   `-- validation/

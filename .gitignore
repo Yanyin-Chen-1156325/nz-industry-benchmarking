@@ -13,6 +13,7 @@ __pycache__/
 *.py[cod]
 *.egg-info/
 .pytest_cache/
+/.pytest-*/
 .ruff_cache/
 .coverage
 htmlcov/
@@ -22,12 +23,15 @@ dist/
 # Local data artifacts
 /data/raw/*
 !/data/raw/.gitkeep
+/data/ingestion/
 /data/bronze/
 /data/silver/
 /data/gold/
 
 # Local Spark and Databricks state
+/.tools/
 /spark-warehouse/
+/.spark-local/
 /metastore_db/
 /.databricks/
 

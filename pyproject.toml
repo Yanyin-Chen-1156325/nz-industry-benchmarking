@@ -8,7 +8,10 @@ version = "0.1.0"
 description = "A data platform for benchmarking New Zealand industries with public Stats NZ AES data."
 readme = "README.md"
 requires-python = ">=3.11"
-dependencies = []
+dependencies = [
+    "delta-spark==4.4.0",
+    "pyspark==4.2.0",
+]
 
 [project.optional-dependencies]
 dev = [
@@ -20,7 +23,7 @@ dev = [
 where = ["src"]
 
 [tool.pytest.ini_options]
-addopts = "-ra"
+addopts = "-ra -p no:cacheprovider"
 pythonpath = ["src"]
 testpaths = ["tests"]
 
