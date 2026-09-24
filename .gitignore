@@ -1,5 +1,6 @@
 # Temporary planning and scratch files
 /temp/
+/frontend/dist/
 
 # Local environment and secrets
 .env
@@ -26,7 +27,9 @@ dist/
 /data/ingestion/
 /data/bronze/
 /data/silver/
+/data/quality/
 /data/gold/
+/data/revisions/
 
 # Local Spark and Databricks state
 /.tools/

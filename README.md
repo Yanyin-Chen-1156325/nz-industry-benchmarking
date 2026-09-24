@@ -11,7 +11,7 @@ project.
 
 ## Current status
 
-Phase 5 (Silver) is complete. The repository currently contains:
+Phase 13 (minimal frontend) is complete. The repository currently contains:
 
 - the inspected AES 2025 provisional CSV in the local `data/raw/` directory;
 - documented dataset findings and limitations;
@@ -22,10 +22,19 @@ Phase 5 (Silver) is complete. The repository currently contains:
 - a PySpark Bronze writer that preserves all raw fields and attaches lineage;
 - an idempotent Delta table keyed logically by source SHA-256;
 - a typed, validated, one-row-in/one-row-out Silver Delta snapshot;
-- reserved API and deployment boundaries for later phases.
+- a PySpark quality framework with stable blocking and informational rules;
+- an inspectable JSON quality report with overall PASS/FAIL and row counts;
+- a Gold Delta metric fact table implementing the approved M1-M7 contract;
+- a read-only PySpark query layer for M4-M6 increases, decreases, and movements;
+- dependency-aware SHA-256/fingerprint planning with safe revision deferral;
+- release-aware Bronze history, Silver current-view selection, and revision audit;
+- a risk-mapped unit, data-quality/contract, and integration test strategy;
+- a typed read-only FastAPI over Gold metrics, trends, and Phase 8 rankings;
+- generated OpenAPI documentation and safe, consistent HTTP errors;
+- a responsive static frontend for performance, trends, statuses, and rankings;
+- reserved deployment boundaries for later phases.
 
-No business-metric calculation, Gold processing, API, or deployment workflow has
-been implemented yet. The broader quality framework remains a later phase.
+No deployment workflow has been implemented yet.
 
 ## Business questions
 
@@ -146,7 +155,172 @@ The default output is `data/silver/aes_observations`. Verify it with:
 python scripts/verify_silver.py
 ```
 
-## Planned architecture
+## Data quality
+
+Assess the persisted Silver Delta table with:
+
+```powershell
+python -m nz_industry_benchmarking.quality
+```
+
+The command checks schema, completeness, validity, uniqueness, and contract
+consistency. It prints and atomically persists a JSON report at
+`data/quality/silver-quality-report.json` by default. A failed blocking check
+returns overall `FAIL` and CLI exit code 1. Legitimate `C`, `S`, and negative
+published values are validated and counted but do not fail the dataset.
+
+The actual AES Silver snapshot passed all 16 checks: 60,255 rows processed,
+60,255 accepted, and zero rejected. Informational counts were 2,563
+confidential, 18 suppressed, and 127 negative published rows. See
+[data quality](docs/data-quality.md) for every rule and its severity.
+
+## Gold analytics
+
+Calculate the approved M1-M7 business metrics from Silver with:
+
+```powershell
+python -m nz_industry_benchmarking.gold
+```
+
+The command writes one long-format Delta table to
+`data/gold/industry_financial_metrics`. Its grain is Silver snapshot, year,
+NZSIOC aggregation level, industry code, and metric ID. M1-M3 are exact H01,
+H23, and H40 published measures; M4-M6 compare only the immediately preceding
+year for the same aggregation level and industry. `metric_status` implements M7
+and keeps protected, unavailable, invalid, and non-meaningful results explicit.
+
+The actual snapshot contains 10,842 rows: 1,807 rows for each of M1-M6. Verify
+the grain, statuses, lineage, and Phase 1 acceptance examples with:
+
+```powershell
+python scripts/verify_gold.py
+```
+
+Re-running unchanged Silver input reports `duplicate: true` and retains the
+first persisted Gold processing timestamp.
+
+## Industry benchmarking
+
+Query the Gold Delta table without creating another persisted copy:
+
+```powershell
+python -m nz_industry_benchmarking.benchmarking `
+  --year 2025 `
+  --metric-id M4 `
+  --aggregation-level "Level 1" `
+  --ranking-type top_increases `
+  --top-n 5
+```
+
+Supported ranking types are `top_increases` (positive values descending),
+`top_decreases` (negative values ascending), and `largest_movements` (absolute
+magnitude descending while returning the signed value). Only `PUBLISHED` M4,
+M5, or M6 rows are eligible. Every ranking is isolated by year, metric, and
+NZSIOC aggregation level, so units and aggregation levels never mix.
+
+Equal primary values are ordered by industry code, industry name, then Gold
+`metric_record_id`, all ascending. `rank_position` is therefore a stable unique
+ordinal rather than a shared competition rank. Run actual-data verification:
+
+```powershell
+python scripts/verify_benchmarks.py
+```
+
+The bounded JSON result is used by the API adapter and retains Gold and source
+lineage. The query layer is intentionally read-only: there is no benchmark
+Delta table to synchronize or deduplicate.
+
+## REST API
+
+Start the read-only FastAPI application after Gold has been created:
+
+```powershell
+python -m nz_industry_benchmarking.api
+```
+
+The default API is served at `http://127.0.0.1:8000`, with interactive OpenAPI
+documentation at `/docs`. It exposes health, available industries, annual
+performance, chronological trends, and M4-M6 benchmark rankings. One Spark
+session is shared for the application lifespan; request handlers do not create
+sessions or implement metric/ranking formulas.
+
+Protected and otherwise non-published observations retain their Gold status and
+serialize with `metric_value: null`, never zero. Validation, no-data, storage,
+and unexpected failures use consistent safe error bodies. See the complete
+[API contract](docs/api.md).
+
+## Minimal frontend
+
+Serve the dependency-free browser client in a second terminal while the API is
+running:
+
+```powershell
+python -m http.server 5173 --directory frontend
+```
+
+Open `http://127.0.0.1:5173`. The UI obtains aggregation-specific industries and
+available years from the API, presents M1-M6 performance and chronological
+trends, and supports all three M4-M6 ranking modes. Protected and unavailable
+values appear as named statuses rather than zero.
+
+Set the API base URL in `frontend/config.js`; set the matching explicit API
+origin allowlist through `API_CORS_ORIGINS`. See the [frontend guide](docs/frontend.md)
+for behavior, local commands, tests, and limitations.
+
+## Incremental processing
+
+Run the existing stages only when their effective inputs changed:
+
+```powershell
+python -m nz_industry_benchmarking.incremental
+```
+
+The planner uses source SHA-256 rather than filename identity. It reports each
+layer as `CURRENT`, `REQUIRED`, or `DEFERRED`, and returns an overall `NO_OP`,
+`PROCESS_REQUIRED`, or `DEFERRED_REVISION` result. An unchanged current source
+does not invoke any Bronze, Silver, or Gold writer.
+
+New artifacts with no observation-grain overlap are appended once to Bronze;
+the existing deterministic Silver and Gold snapshot writers rebuild only when
+their effective input fingerprints are stale. Any overlap with Bronze is safely
+deferred because release precedence belongs to Phase 10. See
+[incremental operations](docs/incremental-processing.md) for exact behavior and
+limitations.
+
+Verify that the actual AES source and all downstream layers are current:
+
+```powershell
+python scripts/verify_incremental.py
+```
+
+## Revision handling
+
+Process an officially identified newer release that Phase 9 deferred because it
+overlaps existing observations:
+
+```powershell
+python -m nz_industry_benchmarking.revision
+```
+
+Release precedence uses only the approved integer `dataset_year`: it must be
+strictly greater for every overlapping current observation. Filename, SHA-256,
+ingestion time, and free-form version text are never sorted to invent authority.
+Equal-year artifacts remain `DEFERRED_AMBIGUOUS`.
+
+Bronze retains both source artifacts. Silver selects one current row per AES
+observation grain, while prior lineage remains in Bronze and the revision audit
+under `data/revisions/`. Missing observations are retained from the previous
+release, not treated as deletions. Gold rebuilds only after the effective Silver
+snapshot changes. See [revision handling](docs/revision-handling.md).
+
+The repository contains only one inspected real Stats NZ artifact. Verify that
+it remains unchanged and produces no revision write with:
+
+```powershell
+python scripts/verify_revision.py
+```
+
+## Architecture
 
 ```text
 Stats NZ AES CSV
@@ -155,13 +329,29 @@ Stats NZ AES CSV
 Python ingestion -> Bronze Delta -> PySpark validation -> Silver Delta
                                                             |
                                                             v
-                                                        Gold Delta
-                                                         /       \
-                                                       SQL       API
+                                                    Quality PASS/FAIL
+                                                            |
+                                                            v
+                                                  M1-M7 Gold Delta
+                                                         |
+                                              +----------+----------+
+                                              |                     |
+                                              v                     v
+                                       Metric/trend queries   Benchmark queries
+                                                                    (M4-M6)
+                                              |                     |
+                                              +----------+----------+
+                                                         v
+                                                   REST API
+                                                         |
+                                                         v
+                                                Minimal frontend
 ```
 
-Ingestion and Bronze Delta are implemented. Components after Bronze remain
-architectural targets and will be implemented phase by phase.
+Ingestion, Bronze, Silver, quality, Gold metrics, benchmarking, incremental
+planning, revision handling, automated testing, and the REST API are
+implemented together with the minimal frontend. Deployment components remain
+later-phase targets.
 
 ## Local setup
 
@@ -175,8 +365,13 @@ python -m pip install -e ".[dev]"
 Copy-Item .env.example .env
 ```
 
-Runtime dependencies are limited to PySpark and Delta Lake. Development tooling
-is installed through the `dev` extra.
+Runtime dependencies are PySpark, Delta Lake, FastAPI, and Uvicorn. PySpark and
+Delta implement the analytical storage boundary; FastAPI provides typed OpenAPI
+and request validation; Uvicorn runs the ASGI application. Pytest, Ruff, and the
+HTTPX2 test client are installed through the `dev` extra.
+
+The frontend has no third-party packages. Node.js is used only for its built-in
+test runner, JavaScript syntax checks, and the copy-only static build.
 
 ## Verification
 
@@ -184,6 +379,16 @@ is installed through the `dev` extra.
 python -m pytest
 ruff check .
 ```
+
+The Phase 13 backend suite contains 67 collected tests: 47 unit, 9
+data-quality/contract, and 11 integration cases. Five additional Node tests cover
+the frontend API adapter and presentation rules. The suites use synthetic
+fixtures and temporary Delta paths;
+the normal suite does not process the full official AES file. The Phase 9 and
+Phase 10 integration cases provide the end-to-end smoke path across CSV
+ingestion, Bronze, Silver, and Gold. See the [testing strategy](docs/testing.md)
+for the inventory, coverage decisions, isolation guarantees, and intentional
+limitations.
 
 ## Repository structure
 
@@ -196,11 +401,17 @@ ruff check .
 |   |-- silver/
 |   `-- gold/
 |-- docs/
+|-- frontend/                       # Static Phase 13 API consumer
 |-- scripts/
 |-- src/nz_industry_benchmarking/
 |   |-- api/
+|   |-- benchmarking/
 |   |-- bronze/
+|   |-- gold/
+|   |-- incremental/
 |   |-- ingestion/
+|   |-- quality/
+|   |-- revision/
 |   |-- silver/
 |   |-- transformation/
 |   `-- validation/

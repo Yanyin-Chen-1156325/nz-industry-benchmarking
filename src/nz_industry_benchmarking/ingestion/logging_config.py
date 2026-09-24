@@ -25,6 +25,18 @@ STRUCTURED_FIELDS = (
     "silver_path",
     "valid_rows",
     "invalid_rows",
+    "quality_report_path",
+    "quality_result",
+    "failed_checks",
+    "gold_path",
+    "pipeline_status",
+    "artifact_status",
+    "bronze_action",
+    "silver_action",
+    "gold_action",
+    "revision_sensitive",
+    "overlap_observations",
+    "changed_observations",
 )
 
 

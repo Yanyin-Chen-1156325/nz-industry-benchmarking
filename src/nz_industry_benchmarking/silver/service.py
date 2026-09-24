@@ -10,6 +10,7 @@ from delta.tables import DeltaTable
 from pyspark.sql import DataFrame, SparkSession
 
 from nz_industry_benchmarking.silver.config import SilverConfig
+from nz_industry_benchmarking.silver.current_view import select_current_bronze_view
 from nz_industry_benchmarking.silver.errors import SilverSourceError
 from nz_industry_benchmarking.silver.models import SilverWriteResult
 from nz_industry_benchmarking.silver.transform import transform_bronze_to_silver
@@ -36,13 +37,15 @@ def process_silver(
         )
 
     bronze = spark.read.format("delta").load(bronze_uri)
-    bronze_input_rows = bronze.count()
-    if bronze_input_rows == 0:
+    bronze_history_rows = bronze.count()
+    if bronze_history_rows == 0:
         raise SilverSourceError(f"Bronze Delta table contains no rows: {bronze_path}")
 
     input_fingerprint = calculate_input_fingerprint(bronze)
+    current_bronze = select_current_bronze_view(bronze)
+    bronze_input_rows = current_bronze.count()
     silver = transform_bronze_to_silver(
-        bronze,
+        current_bronze,
         input_fingerprint=input_fingerprint,
         processing_timestamp=clock(),
     )
@@ -57,13 +60,20 @@ def process_silver(
 
 def calculate_input_fingerprint(bronze: DataFrame) -> str:
     """Hash the sorted set of Bronze artifact identities deterministically."""
-    identities = sorted(
+    identities = {
         (row.ingestion_id, row.source_sha256)
         for row in bronze.select("ingestion_id", "source_sha256")
         .distinct()
         .collect()
-    )
+    }
+    return calculate_input_fingerprint_from_identities(identities)
+
+
+def calculate_input_fingerprint_from_identities(
+    identities: set[tuple[str, str]] | frozenset[tuple[str, str]],
+) -> str:
+    """Hash Bronze identities without requiring a materialized DataFrame."""
     payload = "\n".join(
-        f"{ingestion_id}:{digest}" for ingestion_id, digest in identities
+        f"{ingestion_id}:{digest}" for ingestion_id, digest in sorted(identities)
     )
     return hashlib.sha256(payload.encode("utf-8")).hexdigest().upper()

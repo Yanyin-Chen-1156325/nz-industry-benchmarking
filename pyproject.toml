@@ -10,11 +10,14 @@ readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
     "delta-spark==4.4.0",
+    "fastapi==0.141.1",
     "pyspark==4.2.0",
+    "uvicorn==0.47.0",
 ]
 
 [project.optional-dependencies]
 dev = [
+    "httpx2==2.13.1",
     "pytest>=8.0,<9.0",
     "ruff>=0.11,<1.0",
 ]

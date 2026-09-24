@@ -6,6 +6,7 @@ from pathlib import Path
 import pytest
 
 from nz_industry_benchmarking.ingestion.errors import (
+    SourceCsvError,
     SourceFileNotFoundError,
     SourceSchemaError,
 )
@@ -61,4 +62,14 @@ def test_load_raw_csv_rejects_unexpected_header(tmp_path: Path) -> None:
     source.write_text("Year,Invented_column\n2025,value\n", encoding="utf-8")
 
     with pytest.raises(SourceSchemaError, match="Phase 0 contract"):
+        load_raw_csv(source)
+
+
+def test_load_raw_csv_rejects_malformed_row_shape(tmp_path: Path) -> None:
+    source = tmp_path / "aes.csv"
+    header = ",".join(EXPECTED_COLUMNS)
+    malformed = ",".join([*source_row("100"), "unexpected-extra-field"])
+    source.write_text(f"{header}\n{malformed}\n", encoding="utf-8")
+
+    with pytest.raises(SourceCsvError, match="Malformed CSV row"):
         load_raw_csv(source)

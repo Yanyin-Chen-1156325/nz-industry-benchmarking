@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="Explore published Stats NZ AES industry metrics, trends, and rankings."
+    />
+    <title>NZ Industry Benchmarking</title>
+    <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <a class="brand" href="#top" aria-label="NZ Industry Benchmarking home">
+        <span class="brand-mark" aria-hidden="true">NZ</span>
+        <span>
+          <strong>Industry Benchmarking</strong>
+          <small>Annual Enterprise Survey</small>
+        </span>
+      </a>
+      <div id="api-status" class="api-status" aria-live="polite">
+        <span class="status-dot"></span>
+        Checking API
+      </div>
+    </header>
+
+    <main id="top">
+      <section class="hero" aria-labelledby="page-title">
+        <div>
+          <p class="eyebrow">Stats NZ data product</p>
+          <h1 id="page-title">Understand how New Zealand industries are moving.</h1>
+          <p class="hero-copy">
+            Compare published financial performance, follow change over time,
+            and see the largest year-over-year movements without hiding data
+            availability.
+          </p>
+        </div>
+        <aside class="trust-card" aria-labelledby="trust-title">
+          <p class="eyebrow" id="trust-title">Data context</p>
+          <dl>
+            <div><dt>Source</dt><dd>Stats NZ AES</dd></div>
+            <div><dt>Selected year</dt><dd id="context-year">—</dd></div>
+            <div><dt>Availability</dt><dd id="context-quality">Waiting for data</dd></div>
+          </dl>
+        </aside>
+      </section>
+
+      <section class="filter-panel" aria-labelledby="filters-title">
+        <div>
+          <p class="eyebrow" id="filters-title">Explore an industry</p>
+          <p class="filter-help">Aggregation levels remain separate in every view.</p>
+        </div>
+        <label>
+          Aggregation level
+          <select id="aggregation-level">
+            <option value="Level 1">Level 1</option>
+            <option value="Level 3">Level 3</option>
+            <option value="Level 4">Level 4</option>
+          </select>
+        </label>
+        <label>
+          Industry
+          <select id="industry" disabled>
+            <option>Loading industries…</option>
+          </select>
+        </label>
+        <label>
+          Financial year
+          <select id="performance-year" disabled>
+            <option>—</option>
+          </select>
+        </label>
+      </section>
+
+      <section class="content-section" aria-labelledby="performance-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Financial performance</p>
+            <h2 id="performance-title">Published measures</h2>
+          </div>
+          <p id="selection-summary" class="section-context">Select an industry.</p>
+        </div>
+        <div id="performance-state" class="state-panel loading" aria-live="polite">
+          Loading performance…
+        </div>
+        <div id="performance-content" hidden>
+          <div id="primary-metrics" class="metric-grid"></div>
+          <div class="change-panel">
+            <div>
+              <p class="eyebrow">Year-over-year</p>
+              <h3>Change measures</h3>
+            </div>
+            <div id="change-metrics" class="change-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="content-section" aria-labelledby="trend-title">
+        <div class="section-heading split-heading">
+          <div>
+            <p class="eyebrow">Historical trend</p>
+            <h2 id="trend-title">Performance over time</h2>
+          </div>
+          <label>
+            Metric
+            <select id="trend-metric">
+              <option value="M1">Total income</option>
+              <option value="M2">Surplus before income tax</option>
+              <option value="M3">Return on total assets</option>
+              <option value="M4">Total income YoY growth</option>
+              <option value="M5">Surplus YoY change</option>
+              <option value="M6">Return on assets YoY change</option>
+            </select>
+          </label>
+        </div>
+        <div id="trend-state" class="state-panel loading" aria-live="polite">
+          Loading trend…
+        </div>
+        <div id="trend-content" class="trend-list" hidden></div>
+      </section>
+
+      <section class="content-section" aria-labelledby="benchmark-title">
+        <div class="section-heading">
+          <div>
+            <p class="eyebrow">Industry benchmarking</p>
+            <h2 id="benchmark-title">Rank year-over-year movement</h2>
+          </div>
+          <p class="section-context">Only published results participate.</p>
+        </div>
+        <div class="benchmark-controls">
+          <label>
+            Year
+            <select id="benchmark-year" disabled><option>—</option></select>
+          </label>
+          <label>
+            Change metric
+            <select id="benchmark-metric">
+              <option value="M4">Total income growth</option>
+              <option value="M5">Surplus change</option>
+              <option value="M6">Return on assets change</option>
+            </select>
+          </label>
+          <label>
+            Ranking
+            <select id="ranking-type">
+              <option value="top_increases">Top increases</option>
+              <option value="top_decreases">Top decreases</option>
+              <option value="largest_movements">Largest movements</option>
+            </select>
+          </label>
+          <label>
+            Results
+            <select id="top-n">
+              <option value="5">Top 5</option>
+              <option value="10" selected>Top 10</option>
+              <option value="20">Top 20</option>
+            </select>
+          </label>
+        </div>
+        <div id="benchmark-state" class="state-panel loading" aria-live="polite">
+          Loading ranking…
+        </div>
+        <div id="benchmark-content" class="table-wrap" hidden></div>
+      </section>
+
+      <section class="method-note" aria-labelledby="method-title">
+        <div>
+          <p class="eyebrow">Reading the results</p>
+          <h2 id="method-title">Availability is part of the answer.</h2>
+        </div>
+        <p>
+          Confidential, suppressed, unavailable, or invalid observations appear
+          as a named status—not as zero. Rankings compare only published M4–M6
+          results within the same year and aggregation level.
+        </p>
+      </section>
+    </main>
+
+    <footer>
+      <p>Public aggregate industry statistics · Stats NZ Annual Enterprise Survey</p>
+    </footer>
+
+    <script src="./config.js"></script>
+    <script type="module" src="./js/app.js"></script>
+  </body>
+</html>

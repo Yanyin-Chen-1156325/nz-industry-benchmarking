@@ -2,12 +2,16 @@
 
 from __future__ import annotations
 
+from dataclasses import replace
 from pathlib import Path
 
+import pytest
 from pyspark.sql import functions as F
 
 from nz_industry_benchmarking.bronze.config import BronzeConfig
+from nz_industry_benchmarking.bronze.errors import BronzeIntegrityError
 from nz_industry_benchmarking.bronze.service import persist_ingestion
+from nz_industry_benchmarking.ingestion.models import RawDataset
 
 
 def test_bronze_delta_write_is_faithful_and_idempotent(
@@ -35,3 +39,16 @@ def test_bronze_delta_write_is_faithful_and_idempotent(
     } == {"C", "S"}
     assert stored.where(F.col("ingestion_id") == "ABC123").count() == 2
     assert stored.select("source_sha256").distinct().first()[0] == "ABC123"
+
+    conflicting = replace(
+        outcome,
+        metadata=replace(outcome.metadata, row_count=3),
+        dataset=RawDataset(
+            columns=outcome.dataset.columns,
+            rows=(*outcome.dataset.rows, outcome.dataset.rows[0]),
+            source_sha256=outcome.dataset.source_sha256,
+        ),
+    )
+    with pytest.raises(BronzeIntegrityError, match="partial or conflicting"):
+        persist_ingestion(spark, conflicting, config)
+    assert stored.count() == 2
