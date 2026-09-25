@@ -98,6 +98,11 @@ python -m pytest -m "not spark"
 python -m pytest -m spark
 ```
 
+Both CI backend jobs install `.[dev,local-spark]`. The base project intentionally
+does not install PySpark or Delta Lake because Databricks Serverless supplies
+those runtimes. The 15 Phase 15 Step 1 tests are Spark-free boundary checks; the
+existing Spark suite continues to exercise the refactored local-path adapters.
+
 See [continuous integration](ci.md) for runner versions and workflow details.
 
 ## Intentional limitations

@@ -5,13 +5,17 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from delta.tables import DeltaTable
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
 from nz_industry_benchmarking.ingestion.logging_config import LOGGER_NAME
 from nz_industry_benchmarking.silver.errors import SilverIntegrityError
 from nz_industry_benchmarking.silver.models import SilverWriteResult
+from nz_industry_benchmarking.storage import (
+    DeltaStorage,
+    LocalDeltaStorage,
+    LocalPathTarget,
+)
 
 logger = logging.getLogger(LOGGER_NAME)
 
@@ -25,12 +29,27 @@ def write_silver(
     bronze_input_rows: int,
 ) -> SilverWriteResult:
     """Write one deterministic Silver snapshot without logical duplication."""
-    resolved_path = table_path.resolve()
-    delta_path = resolved_path.as_uri()
-    resolved_path.parent.mkdir(parents=True, exist_ok=True)
+    storage = LocalDeltaStorage(spark, LocalPathTarget(table_path))
+    return write_silver_to_storage(
+        dataframe,
+        storage,
+        input_fingerprint=input_fingerprint,
+        bronze_input_rows=bronze_input_rows,
+    )
 
-    if DeltaTable.isDeltaTable(spark, delta_path):
-        existing = spark.read.format("delta").load(delta_path)
+
+def write_silver_to_storage(
+    dataframe: DataFrame,
+    storage: DeltaStorage,
+    *,
+    input_fingerprint: str,
+    bronze_input_rows: int,
+) -> SilverWriteResult:
+    """Write one Silver snapshot through either supported storage adapter."""
+    target = storage.identifier
+
+    if storage.exists():
+        existing = storage.read()
         fingerprints = {
             row.silver_input_fingerprint
             for row in existing.select("silver_input_fingerprint")
@@ -46,14 +65,14 @@ def write_silver(
             logger.info(
                 "silver_duplicate_input_skipped",
                 extra={
-                    "silver_path": resolved_path.as_posix(),
+                    "silver_path": target,
                     "row_count": bronze_input_rows,
                     "duplicate": True,
                 },
             )
             return _summarise(
                 existing,
-                resolved_path,
+                target,
                 input_fingerprint,
                 bronze_input_rows,
                 duplicate=True,
@@ -62,27 +81,28 @@ def write_silver(
     logger.info(
         "silver_write_started",
         extra={
-            "silver_path": resolved_path.as_posix(),
+            "silver_path": target,
             "row_count": bronze_input_rows,
             "duplicate": False,
         },
     )
-    (
-        dataframe.write.format("delta")
-        .mode("overwrite")
-        .option("overwriteSchema", "true")
-        .option("txnAppId", f"nz-industry-benchmarking-silver:{input_fingerprint}")
-        .option("txnVersion", 0)
-        .save(delta_path)
+    storage.write(
+        dataframe,
+        mode="overwrite",
+        options={
+            "overwriteSchema": "true",
+            "txnAppId": f"nz-industry-benchmarking-silver:{input_fingerprint}",
+            "txnVersion": 0,
+        },
     )
-    stored = spark.read.format("delta").load(delta_path)
+    stored = storage.read()
     if stored.count() != bronze_input_rows:
         raise SilverIntegrityError(
             "Silver output row count does not match the Bronze input row count."
         )
     result = _summarise(
         stored,
-        resolved_path,
+        target,
         input_fingerprint,
         bronze_input_rows,
         duplicate=False,
@@ -90,7 +110,7 @@ def write_silver(
     logger.info(
         "silver_write_completed",
         extra={
-            "silver_path": resolved_path.as_posix(),
+            "silver_path": target,
             "row_count": result.silver_output_rows,
             "valid_rows": result.valid_rows,
             "invalid_rows": result.invalid_rows,
@@ -102,7 +122,7 @@ def write_silver(
 
 def _summarise(
     dataframe: DataFrame,
-    table_path: Path,
+    table_path: str,
     input_fingerprint: str,
     bronze_input_rows: int,
     *,
@@ -115,7 +135,7 @@ def _summarise(
     valid_rows = dataframe.where(F.col("is_valid")).count()
     output_rows = dataframe.count()
     return SilverWriteResult(
-        table_path=table_path.as_posix(),
+        table_path=table_path,
         input_fingerprint=input_fingerprint,
         bronze_input_rows=bronze_input_rows,
         silver_output_rows=output_rows,

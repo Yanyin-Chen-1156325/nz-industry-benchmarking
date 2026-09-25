@@ -5,13 +5,17 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-from delta.tables import DeltaTable
 from pyspark.sql import DataFrame, SparkSession
 
 from nz_industry_benchmarking.gold.contract import GOLD_SCHEMA_VERSION
 from nz_industry_benchmarking.gold.errors import GoldIntegrityError
 from nz_industry_benchmarking.gold.models import GoldWriteResult
 from nz_industry_benchmarking.ingestion.logging_config import LOGGER_NAME
+from nz_industry_benchmarking.storage import (
+    DeltaStorage,
+    LocalDeltaStorage,
+    LocalPathTarget,
+)
 
 logger = logging.getLogger(LOGGER_NAME)
 
@@ -26,12 +30,29 @@ def write_gold(
     expected_gold_rows: int,
 ) -> GoldWriteResult:
     """Write one complete Gold snapshot without logical duplication."""
-    resolved_path = table_path.resolve()
-    delta_path = resolved_path.as_uri()
-    resolved_path.parent.mkdir(parents=True, exist_ok=True)
+    storage = LocalDeltaStorage(spark, LocalPathTarget(table_path))
+    return write_gold_to_storage(
+        dataframe,
+        storage,
+        input_fingerprint=input_fingerprint,
+        silver_input_rows=silver_input_rows,
+        expected_gold_rows=expected_gold_rows,
+    )
 
-    if DeltaTable.isDeltaTable(spark, delta_path):
-        existing = spark.read.format("delta").load(delta_path)
+
+def write_gold_to_storage(
+    dataframe: DataFrame,
+    storage: DeltaStorage,
+    *,
+    input_fingerprint: str,
+    silver_input_rows: int,
+    expected_gold_rows: int,
+) -> GoldWriteResult:
+    """Write one Gold snapshot through either supported storage adapter."""
+    target = storage.identifier
+
+    if storage.exists():
+        existing = storage.read()
         fingerprints = {
             row.gold_input_fingerprint
             for row in existing.select("gold_input_fingerprint").distinct().collect()
@@ -53,14 +74,14 @@ def write_gold(
             logger.info(
                 "gold_duplicate_input_skipped",
                 extra={
-                    "gold_path": resolved_path.as_posix(),
+                    "gold_path": target,
                     "row_count": expected_gold_rows,
                     "duplicate": True,
                 },
             )
             return _summarise(
                 existing,
-                resolved_path,
+                target,
                 input_fingerprint,
                 silver_input_rows,
                 duplicate=True,
@@ -69,27 +90,28 @@ def write_gold(
     logger.info(
         "gold_write_started",
         extra={
-            "gold_path": resolved_path.as_posix(),
+            "gold_path": target,
             "row_count": expected_gold_rows,
             "duplicate": False,
         },
     )
-    (
-        dataframe.write.format("delta")
-        .mode("overwrite")
-        .option("overwriteSchema", "true")
-        .option("txnAppId", f"nz-industry-benchmarking-gold:{input_fingerprint}")
-        .option("txnVersion", 0)
-        .save(delta_path)
+    storage.write(
+        dataframe,
+        mode="overwrite",
+        options={
+            "overwriteSchema": "true",
+            "txnAppId": f"nz-industry-benchmarking-gold:{input_fingerprint}",
+            "txnVersion": 0,
+        },
     )
-    stored = spark.read.format("delta").load(delta_path)
+    stored = storage.read()
     if stored.count() != expected_gold_rows:
         raise GoldIntegrityError(
             "Gold output row count does not match the transformed row count."
         )
     result = _summarise(
         stored,
-        resolved_path,
+        target,
         input_fingerprint,
         silver_input_rows,
         duplicate=False,
@@ -97,7 +119,7 @@ def write_gold(
     logger.info(
         "gold_write_completed",
         extra={
-            "gold_path": resolved_path.as_posix(),
+            "gold_path": target,
             "row_count": result.gold_output_rows,
             "duplicate": False,
         },
@@ -107,7 +129,7 @@ def write_gold(
 
 def _summarise(
     dataframe: DataFrame,
-    table_path: Path,
+    table_path: str,
     input_fingerprint: str,
     silver_input_rows: int,
     *,
@@ -122,7 +144,7 @@ def _summarise(
         for row in dataframe.groupBy("metric_status").count().collect()
     }
     return GoldWriteResult(
-        table_path=table_path.as_posix(),
+        table_path=table_path,
         input_fingerprint=input_fingerprint,
         silver_input_rows=silver_input_rows,
         gold_output_rows=dataframe.count(),

@@ -64,7 +64,7 @@ quality, or revision artifacts outside pytest temporary directories.
 From an activated environment created with Python 3.13 and Java 17:
 
 ```powershell
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev,local-spark]"
 ruff check .
 python -m pytest -m "not spark"
 python -m pip wheel --no-deps --wheel-dir dist .

@@ -218,5 +218,27 @@ state-management package is introduced. See [`frontend.md`](frontend.md).
 
 ## Not implemented
 
-Authentication, Databricks jobs, deployment, and CI/CD workflows remain outside
-the implemented architecture and require approval in their respective phases.
+Phase 15 Step 1 adds a storage boundary underneath the unchanged transformations:
+
+```text
+                         shared transformations
+                                |
+                +---------------+---------------+
+                |                               |
+              Local                         Databricks
+                |                               |
+       locally created Spark             provided `spark`
+                |                               |
+       path-based Delta tables      Unity Catalog managed tables
+                |                               |
+        LocalDeltaStorage             CatalogDeltaStorage
+```
+
+The Databricks entry point covers only an initial Bronze -> Silver -> Gold load
+and an idempotent rerun of the same source artifact. It evaluates the existing
+Silver quality rules in memory and returns the report without introducing a
+temporary persistence design.
+
+Databricks job deployment, authentication, quality audit-table persistence,
+incremental/revision managed state, Databricks SQL access, and Azure/API
+integration remain outside this step. See [`databricks.md`](databricks.md).

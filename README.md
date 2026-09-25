@@ -11,7 +11,7 @@ project.
 
 ## Current status
 
-Phase 14 (CI/CD) is complete. The repository currently contains:
+Phase 15 migration Step 1 is implemented. The repository currently contains:
 
 - the inspected AES 2025 provisional CSV in the local `data/raw/` directory;
 - documented dataset findings and limitations;
@@ -33,10 +33,11 @@ Phase 14 (CI/CD) is complete. The repository currently contains:
 - generated OpenAPI documentation and safe, consistent HTTP errors;
 - a responsive static frontend for performance, trends, statuses, and rankings;
 - GitHub Actions validation with separate fast, Spark/Delta, and frontend jobs;
-- reserved deployment boundaries for later phases.
+- a first-run Databricks Serverless boundary using Unity Catalog managed tables;
+- reserved deployment and incremental-state boundaries for later phases.
 
-Deployment is deferred to Phase 15; no deployment workflow or credentials have
-been added.
+Actual Databricks execution and deployment remain manual; no workspace
+credentials or deployment workflow have been added.
 
 ## Business questions
 
@@ -363,14 +364,17 @@ Python 3.11 or newer and Java 17 or newer are required.
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
 python -m pip install --upgrade pip
-python -m pip install -e ".[dev]"
+python -m pip install -e ".[dev,local-spark]"
 Copy-Item .env.example .env
 ```
 
-Runtime dependencies are PySpark, Delta Lake, FastAPI, and Uvicorn. PySpark and
-Delta implement the analytical storage boundary; FastAPI provides typed OpenAPI
-and request validation; Uvicorn runs the ASGI application. Pytest, Ruff, and the
-HTTPX2 test client are installed through the `dev` extra.
+The `local-spark` extra installs PySpark and Delta Lake for local execution.
+They are deliberately absent from the base install because Databricks provides
+its own compatible Spark runtime. FastAPI and Uvicorn remain base runtime
+dependencies; pytest, Ruff, and HTTPX2 are installed through the `dev` extra.
+
+For the first manual Databricks Bronze -> Silver -> Gold run, see the
+[Databricks initial-load guide](docs/databricks.md).
 
 The frontend has no third-party packages. Node.js is used only for its built-in
 test runner, JavaScript syntax checks, and the copy-only static build.
@@ -382,8 +386,7 @@ python -m pytest
 ruff check .
 ```
 
-The Phase 13 backend suite contains 67 collected tests: 47 unit, 9
-data-quality/contract, and 11 integration cases. Five additional Node tests cover
+The backend suite contains 82 collected tests. Five additional Node tests cover
 the frontend API adapter and presentation rules. The suites use synthetic
 fixtures and temporary Delta paths;
 the normal suite does not process the full official AES file. The Phase 9 and
