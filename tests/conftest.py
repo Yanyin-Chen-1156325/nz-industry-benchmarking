@@ -16,6 +16,19 @@ from nz_industry_benchmarking.ingestion.models import (
 )
 
 
+def pytest_collection_modifyitems(items: list[pytest.Item]) -> None:
+    """Mark tests that depend on the shared Spark fixture.
+
+    Pytest expands ``fixturenames`` to include transitive dependencies, so tests
+    using ``bronze_dataframe_factory`` are included without duplicating markers
+    throughout the suite.
+    """
+    spark_marker = pytest.mark.spark
+    for item in items:
+        if "spark" in item.fixturenames:
+            item.add_marker(spark_marker)
+
+
 @pytest.fixture
 def bronze_outcome() -> IngestionOutcome:
     """Return representative raw records containing protected values."""

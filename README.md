@@ -11,7 +11,7 @@ project.
 
 ## Current status
 
-Phase 13 (minimal frontend) is complete. The repository currently contains:
+Phase 14 (CI/CD) is complete. The repository currently contains:
 
 - the inspected AES 2025 provisional CSV in the local `data/raw/` directory;
 - documented dataset findings and limitations;
@@ -32,9 +32,11 @@ Phase 13 (minimal frontend) is complete. The repository currently contains:
 - a typed read-only FastAPI over Gold metrics, trends, and Phase 8 rankings;
 - generated OpenAPI documentation and safe, consistent HTTP errors;
 - a responsive static frontend for performance, trends, statuses, and rankings;
+- GitHub Actions validation with separate fast, Spark/Delta, and frontend jobs;
 - reserved deployment boundaries for later phases.
 
-No deployment workflow has been implemented yet.
+Deployment is deferred to Phase 15; no deployment workflow or credentials have
+been added.
 
 ## Business questions
 
@@ -389,6 +391,15 @@ Phase 10 integration cases provide the end-to-end smoke path across CSV
 ingestion, Bronze, Silver, and Gold. See the [testing strategy](docs/testing.md)
 for the inventory, coverage decisions, isolation guarantees, and intentional
 limitations.
+
+## Continuous integration
+
+GitHub Actions runs on pull requests and pushes to `main`. Independent jobs
+provide fast backend feedback, one non-duplicated Spark/Delta test pass, and the
+existing dependency-free frontend test/lint/build checks. CI uses Python 3.13,
+Java 17, and Node.js 22 and never requires the ignored official AES CSV. See the
+[CI guide](docs/ci.md) for exact commands, triggers, permissions, dependency
+resolution, and the Phase 15 deployment boundary.
 
 ## Repository structure
 

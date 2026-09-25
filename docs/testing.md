@@ -83,6 +83,23 @@ no-data mapping, and safe API-unavailable errors. The static frontend also uses
 - Idempotency tests rerun the same operation and inspect row counts, fingerprints,
   report equality, or Delta versions.
 
+## CI test selection
+
+Phase 14 partitions the suite into complementary fast and Spark/Delta runs.
+During collection, any test that directly or transitively depends on the shared
+`spark` fixture receives the registered `spark` marker. This keeps classification
+tied to the actual runtime dependency and avoids changing test behavior or
+repeating expensive cases.
+
+Run the same selections locally with:
+
+```powershell
+python -m pytest -m "not spark"
+python -m pytest -m spark
+```
+
+See [continuous integration](ci.md) for runner versions and workflow details.
+
 ## Intentional limitations
 
 - Filesystem permission-denied behavior is platform-specific; deterministic
