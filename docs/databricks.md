@@ -32,9 +32,9 @@ Silver and Gold retain their existing deterministic snapshot/idempotency rules.
 Quality is evaluated and reported with the existing rules; Step 1 does not yet
 persist that report as a managed audit table or make it a new pipeline gate.
 
-Not included: notebooks containing business logic, automated workspace
-deployment, Databricks jobs, internet download, Azure integration, Databricks SQL
-API access, unattended authentication, or incremental/revision orchestration.
+Not included: notebooks containing business logic, automated workspace/job
+deployment, internet download, Azure integration, Databricks SQL API access,
+unattended authentication, or incremental/revision orchestration.
 
 ## First manual run
 
@@ -55,10 +55,41 @@ API access, unattended authentication, or incremental/revision orchestration.
 3. Upload the CSV to the Volume, for example
    `/Volumes/workspace/nz_industry_benchmarking/source_files/annual-enterprise-survey-2025-financial-year-provisional.csv`.
 
-4. Upload/install the built project wheel in the Serverless notebook environment.
-   Do not install the `local-spark` extra, PySpark, or `delta-spark` there.
+4. Upload the built wheel and create a **Python wheel** task on a Spark-enabled
+   Databricks runtime. Do not install the `local-spark` extra, PySpark, or
+   `delta-spark` there.
 
-5. Use a thin Python notebook cell. The notebook supplies its existing `spark`:
+5. Enter these Python wheel task values:
+
+   ```text
+   Package name: nz-industry-benchmarking
+   Entry point: nz-industry-benchmarking-databricks
+   ```
+
+6. Supply these task parameters as separate arguments:
+
+   ```text
+   --source-file
+   /Volumes/workspace/nz_industry_benchmarking/source_files/annual-enterprise-survey-2025-financial-year-provisional.csv
+   --catalog
+   workspace
+   --schema
+   nz_industry_benchmarking
+   --bronze-table
+   bronze_aes
+   --silver-table
+   silver_aes_observations
+   --gold-table
+   gold_industry_financial_metrics
+   ```
+
+   Only `--source-file` is required. The remaining values shown above are the
+   defaults and may be omitted. The console wrapper retrieves the active
+   Databricks SparkSession, delegates to `run_initial_load`, and prints the
+   resulting counts and quality report as formatted JSON.
+
+7. Alternatively, a thin interactive notebook can call the same orchestration
+   directly with its existing `spark`:
 
    ```python
    from pathlib import Path
@@ -84,7 +115,7 @@ API access, unattended authentication, or incremental/revision orchestration.
    result.to_dict()
    ```
 
-6. Confirm `result.quality.overall_result`, row counts, and table contents:
+8. Confirm the task JSON quality result, row counts, and table contents:
 
    ```sql
    SELECT count(*) FROM workspace.nz_industry_benchmarking.bronze_aes;

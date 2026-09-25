@@ -13,6 +13,9 @@ dependencies = [
     "uvicorn==0.47.0",
 ]
 
+[project.scripts]
+nz-industry-benchmarking-databricks = "nz_industry_benchmarking.databricks.job:main"
+
 [project.optional-dependencies]
 local-spark = [
     "delta-spark==4.4.0",

@@ -14,6 +14,12 @@ from nz_industry_benchmarking.ingestion.config import (
 )
 from nz_industry_benchmarking.storage import CatalogTableTarget
 
+DEFAULT_CATALOG = "workspace"
+DEFAULT_DATABRICKS_SCHEMA = "nz_industry_benchmarking"
+DEFAULT_BRONZE_TABLE = "bronze_aes"
+DEFAULT_SILVER_TABLE = "silver_aes_observations"
+DEFAULT_GOLD_TABLE = "gold_industry_financial_metrics"
+
 
 @dataclass(frozen=True, slots=True)
 class DatabricksInitialLoadConfig:
@@ -24,11 +30,11 @@ class DatabricksInitialLoadConfig:
     dataset_year: int = DEFAULT_DATASET_YEAR
     dataset_version: str = DEFAULT_DATASET_VERSION
     schema_version: str = DEFAULT_SCHEMA_VERSION
-    catalog: str = "workspace"
-    schema: str = "nz_industry_benchmarking"
-    bronze_table: str = "bronze_aes"
-    silver_table: str = "silver_aes_observations"
-    gold_table: str = "gold_industry_financial_metrics"
+    catalog: str = DEFAULT_CATALOG
+    schema: str = DEFAULT_DATABRICKS_SCHEMA
+    bronze_table: str = DEFAULT_BRONZE_TABLE
+    silver_table: str = DEFAULT_SILVER_TABLE
+    gold_table: str = DEFAULT_GOLD_TABLE
 
     def __post_init__(self) -> None:
         if not isinstance(self.source_file, Path):
