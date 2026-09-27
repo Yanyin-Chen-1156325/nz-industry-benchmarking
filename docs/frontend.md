@@ -13,24 +13,31 @@ First start the API from the repository root, with Java 17 or newer configured:
 python -m nz_industry_benchmarking.api
 ```
 
-In a second terminal, serve the frontend:
+In a second terminal, build and serve the static frontend:
 
 ```powershell
-python -m http.server 5173 --directory frontend
+cd frontend
+npm run build
+python -m http.server 8080 --directory dist
 ```
 
-Open `http://127.0.0.1:5173`. The default API URL is
-`http://127.0.0.1:8000`. To change it, edit `frontend/config.js` before serving
-or building:
+Open `http://127.0.0.1:8080` or `http://localhost:8080`. With no build-time
+override, the frontend calls the local API at `http://127.0.0.1:8000`.
 
-```javascript
-window.NZ_BENCHMARKING_CONFIG = {
-  apiBaseUrl: "https://api.example.test",
-};
+For a cloud build, supply the public FastAPI URL without committing it:
+
+```powershell
+$env:FRONTEND_API_BASE_URL = "https://api.example.test"
+npm run build
 ```
 
-The API accepts the local frontend origins configured by `API_CORS_ORIGINS`.
-Origins are comma-separated and explicit; wildcard CORS is not enabled.
+The build writes this value to `dist/config.js`. Browser code receives only the
+public FastAPI URL; Databricks hostname, HTTP path, and token remain backend-only
+settings.
+
+The API accepts `http://127.0.0.1:8080` and `http://localhost:8080` locally.
+Cloud deployment must set the comma-separated `API_CORS_ORIGINS` to the exact
+public frontend origin. Wildcard CORS is not enabled.
 
 ## User flow
 
@@ -91,8 +98,9 @@ npm run lint
 npm run build
 ```
 
-The build copies the static application to ignored `frontend/dist/`. It does not
-bundle, transpile, or alter application behavior.
+The build copies the static application to ignored `frontend/dist/` and
+generates `dist/config.js` from `FRONTEND_API_BASE_URL`. It does not bundle or
+transpile the application.
 
 ## Limitations
 

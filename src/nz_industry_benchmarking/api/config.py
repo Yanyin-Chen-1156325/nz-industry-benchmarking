@@ -29,8 +29,8 @@ class ApiConfig:
     port: int = 8000
     log_level: str = "INFO"
     cors_origins: tuple[str, ...] = (
-        "http://127.0.0.1:5173",
-        "http://localhost:5173",
+        "http://127.0.0.1:8080",
+        "http://localhost:8080",
     )
 
     def __post_init__(self) -> None:
@@ -70,7 +70,7 @@ class ApiConfig:
                 origin.strip()
                 for origin in values.get(
                     "API_CORS_ORIGINS",
-                    "http://127.0.0.1:5173,http://localhost:5173",
+                    "http://127.0.0.1:8080,http://localhost:8080",
                 ).split(",")
                 if origin.strip()
             ),

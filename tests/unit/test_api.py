@@ -146,16 +146,12 @@ def test_health_and_openapi_are_available_without_storage_query(
 def test_frontend_origin_is_allowed_without_wildcard_cors(
     client: TestClient,
 ) -> None:
-    response = client.get(
-        "/api/health", headers={"Origin": "http://127.0.0.1:5173"}
-    )
+    response = client.get("/api/health", headers={"Origin": "http://127.0.0.1:8080"})
     blocked = client.get(
         "/api/health", headers={"Origin": "https://untrusted.example"}
     )
 
-    assert response.headers["access-control-allow-origin"] == (
-        "http://127.0.0.1:5173"
-    )
+    assert response.headers["access-control-allow-origin"] == ("http://127.0.0.1:8080")
     assert "access-control-allow-origin" not in blocked.headers
 
 

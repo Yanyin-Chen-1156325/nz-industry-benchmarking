@@ -19,7 +19,7 @@ The default address is `http://127.0.0.1:8000`. Configuration is read from
 lifespan and stops it at shutdown; it does not create a session per request.
 
 For the Phase 13 local frontend, the API allows
-`http://127.0.0.1:5173` and `http://localhost:5173` by default. Override the
+`http://127.0.0.1:8080` and `http://localhost:8080` by default. Override the
 comma-separated allowlist with `API_CORS_ORIGINS`. Wildcard CORS is not used.
 
 Interactive OpenAPI documentation is available at `/docs`; the raw OpenAPI
