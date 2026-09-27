@@ -9,6 +9,7 @@ description = "A data platform for benchmarking New Zealand industries with publ
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
+    "databricks-sql-connector==4.6.0",
     "fastapi==0.141.1",
     "uvicorn==0.47.0",
 ]

@@ -125,3 +125,25 @@ queries and calls the existing `query_benchmarks` function for rankings.
 The local API is intended as a portfolio demonstration. It has no write methods,
 authentication, response cache, distributed Spark gateway, or availability SLA.
 Those concerns require a deployment design and are outside Phase 12.
+
+## Databricks SQL repository adapter
+
+`DatabricksSqlAnalyticsRepository` is also available as a Spark-free adapter to
+the same `AnalyticsRepository` contract. It reads the configurable managed Gold
+table through `databricks-sql-connector`, maps rows to the existing API records,
+and implements the Phase 8 ranking rules in parameterized Databricks SQL.
+
+The local `SparkGoldRepository` remains supported and is still the API startup
+default. Selecting the remote adapter at API startup is a separate deployment
+step and has not been enabled here.
+
+Create `DatabricksSqlConfig` directly or with `from_environment()`. The latter
+reads `DATABRICKS_SERVER_HOSTNAME`, `DATABRICKS_HTTP_PATH`, and
+`DATABRICKS_TOKEN`; optional identifiers are `DATABRICKS_CATALOG` (default
+`workspace`), `DATABRICKS_SCHEMA` (default `nz_industry_benchmarking`), and
+`DATABRICKS_GOLD_TABLE` (default `gold_industry_financial_metrics`). Keep all
+credentials in the local environment or a secret manager and never commit them
+to Git. External authenticated SQL connectivity and the 10,842-row managed Gold
+table were manually verified separately; this adapter's automated tests use
+only fake connections and do not contact Databricks. This is not an Azure
+deployment.
