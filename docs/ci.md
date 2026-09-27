@@ -2,8 +2,9 @@
 
 Phase 14 adds one GitHub Actions workflow at `.github/workflows/ci.yml`. It
 validates pull requests and pushes to `main`; it does not deploy the application.
-Azure and Databricks deployment remain Phase 15 work because no deployment
-infrastructure or credentials are part of Phase 14.
+The later manually verified Databricks Free Edition wheel deployment is not
+performed by this workflow. No deployment infrastructure or credentials are
+part of Phase 14.
 
 ## Workflow structure
 

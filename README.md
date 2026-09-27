@@ -3,15 +3,15 @@
 A portfolio-scale data product for comparing financial performance across New
 Zealand industries using the public Stats NZ Annual Enterprise Survey (AES).
 
-The planned platform will demonstrate a production-style Bronze/Silver/Gold
-pipeline with Python, PySpark, Delta Lake, Databricks, data-quality controls,
-automated tests, and a small REST API. The implementation will stay focused on
-industry benchmarking rather than becoming a large dashboard or machine-learning
-project.
+The project demonstrates a Bronze/Silver/Gold pipeline with Python, PySpark,
+Delta Lake, Databricks Serverless, Unity Catalog, data-quality controls,
+automated tests, and a small REST API. It stays focused on industry benchmarking
+rather than becoming a large dashboard or machine-learning project.
 
 ## Current status
 
-Phase 15 migration Step 1 is implemented. The repository currently contains:
+Phase 15 migration Step 1 is deployed and verified in Databricks Free Edition.
+The repository currently contains:
 
 - the inspected AES 2025 provisional CSV in the local `data/raw/` directory;
 - documented dataset findings and limitations;
@@ -33,11 +33,13 @@ Phase 15 migration Step 1 is implemented. The repository currently contains:
 - generated OpenAPI documentation and safe, consistent HTTP errors;
 - a responsive static frontend for performance, trends, statuses, and rankings;
 - GitHub Actions validation with separate fast, Spark/Delta, and frontend jobs;
-- a first-run Databricks Serverless boundary using Unity Catalog managed tables;
-- reserved deployment and incremental-state boundaries for later phases.
+- a verified Databricks Free Edition Serverless Python wheel Job;
+- Unity Catalog Volume input and Bronze/Silver/Gold managed Delta tables;
+- a verified 60,255-row real-data run and idempotent rerun;
+- reserved automated deployment and incremental managed-state boundaries.
 
-Actual Databricks execution and deployment remain manual; no workspace
-credentials or deployment workflow have been added.
+The Databricks Job is manually triggered and has no schedule. No workspace
+credentials or automated deployment workflow are stored in the repository.
 
 ## Business questions
 
@@ -352,9 +354,25 @@ Python ingestion -> Bronze Delta -> PySpark validation -> Silver Delta
 ```
 
 Ingestion, Bronze, Silver, quality, Gold metrics, benchmarking, incremental
-planning, revision handling, automated testing, and the REST API are
-implemented together with the minimal frontend. Deployment components remain
-later-phase targets.
+planning, revision handling, automated testing, and the REST API are implemented
+together with the minimal frontend. The shared Bronze-to-Gold pipeline has also
+been executed as a Python wheel Job on Databricks Free Edition Serverless;
+automated cloud deployment and Azure integration remain later-phase targets.
+
+## Verified Databricks deployment
+
+The real 60,255-row Stats NZ AES 2025 provisional CSV was processed from a Unity
+Catalog Volume by the manually triggered `NZ Industry Benchmarking Pipeline`
+Python wheel Job. The run produced 60,255 valid Silver rows, passed all 16 data
+quality checks, and wrote 10,842 Gold metric rows to managed Delta tables. A
+second run detected the same source, inserted zero Bronze rows, and reused the
+Silver and Gold snapshots.
+
+This verifies PySpark, Delta Lake, Databricks Serverless, Unity Catalog,
+Bronze/Silver/Gold processing, data quality, idempotent ingestion, Python wheel
+deployment, and Databricks Jobs against the public Stats NZ dataset. See the
+[Databricks deployment runbook](docs/databricks.md) for the exact environment,
+Job values, parameters, results, SQL checks, and current limitations.
 
 ## Local setup
 
@@ -373,8 +391,8 @@ They are deliberately absent from the base install because Databricks provides
 its own compatible Spark runtime. FastAPI and Uvicorn remain base runtime
 dependencies; pytest, Ruff, and HTTPX2 are installed through the `dev` extra.
 
-For the first manual Databricks Bronze -> Silver -> Gold run, see the
-[Databricks initial-load guide](docs/databricks.md).
+For the verified Databricks Bronze -> Silver -> Gold deployment, see the
+[Databricks deployment runbook](docs/databricks.md).
 
 The frontend has no third-party packages. Node.js is used only for its built-in
 test runner, JavaScript syntax checks, and the copy-only static build.
@@ -386,7 +404,7 @@ python -m pytest
 ruff check .
 ```
 
-The backend suite contains 82 collected tests. Five additional Node tests cover
+The backend suite contains 89 collected tests. Five additional Node tests cover
 the frontend API adapter and presentation rules. The suites use synthetic
 fixtures and temporary Delta paths;
 the normal suite does not process the full official AES file. The Phase 9 and
@@ -402,7 +420,7 @@ provide fast backend feedback, one non-duplicated Spark/Delta test pass, and the
 existing dependency-free frontend test/lint/build checks. CI uses Python 3.13,
 Java 17, and Node.js 22 and never requires the ignored official AES CSV. See the
 [CI guide](docs/ci.md) for exact commands, triggers, permissions, dependency
-resolution, and the Phase 15 deployment boundary.
+resolution, and the automated deployment boundary.
 
 ## Repository structure
 

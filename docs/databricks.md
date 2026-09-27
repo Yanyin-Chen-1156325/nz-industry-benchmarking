@@ -1,127 +1,207 @@
-# Databricks Free Edition initial load
+# Databricks Free Edition deployment and runbook
 
-Phase 15 migration Step 1 prepares the repository for one manual real-data
-Bronze -> Silver -> Gold run on Databricks Free Edition Serverless. Free Edition
-is used for portfolio/demo purposes, not as a production deployment target.
+The Bronze -> Silver -> Gold pipeline has been manually deployed and executed
+against the real Stats NZ Annual Enterprise Survey 2025 provisional dataset in
+Databricks Free Edition. The verified compute type is Serverless. This is a
+portfolio/demo deployment, not an Azure Databricks deployment.
 
-## Architecture and ownership
+## Verified architecture
 
-Local and Databricks execution import the same Bronze schema, Silver current-view
+```text
+Stats NZ AES CSV
+        |
+        v
+Unity Catalog Volume
+        |
+        v
+Databricks Serverless Python wheel Job
+        |
+        v
+Bronze managed Delta table
+        |
+        v
+Shared Silver transformation
+        |
+        v
+Existing data-quality checks
+        |
+        v
+Shared Gold business metrics
+        |
+        v
+Unity Catalog managed Delta tables / SQL analytics
+```
+
+Local and Databricks execution use the same Bronze schema, Silver current-view
 selection, Silver transformation, quality evaluator, and Gold transformation.
-Only runtime ownership and persistence differ:
+Only Spark ownership and storage adapters differ:
 
-| Concern | Local | Databricks Free Edition |
+| Concern | Local development | Databricks Free Edition |
 |---|---|---|
-| Spark lifecycle | `create_spark_session` creates/configures/stops local Spark | The caller passes the platform-provided `spark` |
-| Delta identity | Filesystem path | Three-part Unity Catalog table name |
-| Read | `spark.read.format("delta").load(...)` | `spark.table(...)` |
-| Write | Delta `.save(path)` | Delta `.saveAsTable(name)` |
-| Quality output | Existing local JSON service when invoked locally | Returned `QualityReport`; no audit table yet |
+| Spark | Locally created PySpark session | Platform-provided Serverless Spark session |
+| Delta storage | Filesystem paths | Unity Catalog managed tables |
+| Source location | Local file | Unity Catalog Volume |
+| Execution | Local commands and pytest | Python wheel Job |
+| Quality result | Optional local JSON report | Job result JSON; no audit table yet |
 
-`run_initial_load` never selects `local[...]`, installs Maven packages, configures
-Spark extensions, accesses `spark.sparkContext`, or stops Spark. The base Python
-package also excludes `pyspark` and `delta-spark`; use `local-spark` only on a
-developer machine or in CI.
+The Databricks wrapper does not create or stop Spark, access
+`spark.sparkContext`, or contain transformation formulas.
 
-## Scope and safety
+## Prerequisites and deployed layout
 
-This entry point accepts an empty Bronze target or an idempotent rerun of the
-same source artifact. It deliberately rejects a managed Bronze table containing
-a different ingestion because incremental/revision-state migration is deferred.
-Silver and Gold retain their existing deterministic snapshot/idempotency rules.
-Quality is evaluated and reported with the existing rules; Step 1 does not yet
-persist that report as a managed audit table or make it a new pipeline gate.
+- Databricks Free Edition workspace with Serverless compute.
+- Catalog: `workspace`
+- Schema: `workspace.nz_industry_benchmarking`
+- Volume: `workspace.nz_industry_benchmarking.source_files`
+- Source CSV:
+  `/Volumes/workspace/nz_industry_benchmarking/source_files/annual-enterprise-survey-2025-financial-year-provisional.csv`
+- Wheel:
+  `/Volumes/workspace/nz_industry_benchmarking/source_files/packages/nz_industry_benchmarking-0.1.0-py3-none-any.whl`
 
-Not included: notebooks containing business logic, automated workspace/job
-deployment, internet download, Azure integration, Databricks SQL API access,
-unattended authentication, or incremental/revision orchestration.
+The wheel is installed as an environment dependency. Databricks supplies Spark
+and Delta, so the wheel environment must not install the project's
+`local-spark` extra.
 
-## First manual run
+The required schema and Volume can be created with:
 
-1. Build a wheel locally without bundling dependencies:
+```sql
+CREATE SCHEMA IF NOT EXISTS workspace.nz_industry_benchmarking;
+CREATE VOLUME IF NOT EXISTS workspace.nz_industry_benchmarking.source_files;
+```
 
-   ```powershell
-   python -m pip wheel --no-deps --wheel-dir dist .
-   ```
+Download the official CSV outside Databricks and upload it to the source path.
+The deployed pipeline does not download Stats NZ data from the internet.
 
-2. In Databricks, create or confirm the schema and a Volume for the manually
-   downloaded official Stats NZ file:
+## Build and install the wheel
 
-   ```sql
-   CREATE SCHEMA IF NOT EXISTS workspace.nz_industry_benchmarking;
-   CREATE VOLUME IF NOT EXISTS workspace.nz_industry_benchmarking.source_files;
-   ```
+Build from the repository root:
 
-3. Upload the CSV to the Volume, for example
-   `/Volumes/workspace/nz_industry_benchmarking/source_files/annual-enterprise-survey-2025-financial-year-provisional.csv`.
+```powershell
+python -m pip wheel --no-deps --wheel-dir dist .
+```
 
-4. Upload the built wheel and create a **Python wheel** task on a Spark-enabled
-   Databricks runtime. Do not install the `local-spark` extra, PySpark, or
-   `delta-spark` there.
+Upload `nz_industry_benchmarking-0.1.0-py3-none-any.whl` to the `packages`
+directory shown above, then add that wheel path as an environment dependency for
+the Job.
 
-5. Enter these Python wheel task values:
+## Verified Python wheel Job configuration
 
-   ```text
-   Package name: nz-industry-benchmarking
-   Entry point: nz-industry-benchmarking-databricks
-   ```
+- Job name: `NZ Industry Benchmarking Pipeline`
+- Task type: `Python wheel`
+- Compute: `Serverless`
+- Schedule/trigger: none; the Job is run manually
+- Package name: `nz_industry_benchmarking`
+- Entry point: `databricks_job`
 
-6. Supply these task parameters as separate arguments:
+Databricks Free Edition resolves these Job fields as a Python import package and
+a callable attribute on that package. The package root exposes
+`databricks_job()`, which delegates to the existing Databricks job wrapper.
 
-   ```text
-   --source-file
-   /Volumes/workspace/nz_industry_benchmarking/source_files/annual-enterprise-survey-2025-financial-year-provisional.csv
-   --catalog
-   workspace
-   --schema
-   nz_industry_benchmarking
-   --bronze-table
-   bronze_aes
-   --silver-table
-   silver_aes_observations
-   --gold-table
-   gold_industry_financial_metrics
-   ```
+Supply these task parameters as separate arguments:
 
-   Only `--source-file` is required. The remaining values shown above are the
-   defaults and may be omitted. The console wrapper retrieves the active
-   Databricks SparkSession, delegates to `run_initial_load`, and prints the
-   resulting counts and quality report as formatted JSON.
+```text
+--source-file
+/Volumes/workspace/nz_industry_benchmarking/source_files/annual-enterprise-survey-2025-financial-year-provisional.csv
+--catalog
+workspace
+--schema
+nz_industry_benchmarking
+--bronze-table
+bronze_aes
+--silver-table
+silver_aes_observations
+--gold-table
+gold_industry_financial_metrics
+```
 
-7. Alternatively, a thin interactive notebook can call the same orchestration
-   directly with its existing `spark`:
+Only `--source-file` is required. The displayed catalog, schema, and table names
+are the configured defaults.
 
-   ```python
-   from pathlib import Path
+Because AES is an annual source and no automated source acquisition exists, the
+current portfolio workflow intentionally has no schedule. Run the Job manually
+when an approved source dataset is available in the Volume.
 
-   from nz_industry_benchmarking.databricks import (
-       DatabricksInitialLoadConfig,
-       run_initial_load,
-   )
+## Run manually
 
-   config = DatabricksInitialLoadConfig(
-       source_file=Path(
-           "/Volumes/workspace/nz_industry_benchmarking/source_files/"
-           "annual-enterprise-survey-2025-financial-year-provisional.csv"
-       ),
-       catalog="workspace",
-       schema="nz_industry_benchmarking",
-       bronze_table="bronze_aes",
-       silver_table="silver_aes_observations",
-       gold_table="gold_industry_financial_metrics",
-   )
+1. Open the `NZ Industry Benchmarking Pipeline` Job.
+2. Confirm the wheel environment dependency, Serverless compute, package name,
+   entry point, and source-file parameter shown above.
+3. Select **Run now**.
+4. Inspect the task output JSON for Bronze, Silver, quality, and Gold results.
+5. Run the SQL checks below against the managed tables.
 
-   result = run_initial_load(spark, config)
-   result.to_dict()
-   ```
+## Verified managed tables and results
 
-8. Confirm the task JSON quality result, row counts, and table contents:
+The successful real-data execution created:
 
-   ```sql
-   SELECT count(*) FROM workspace.nz_industry_benchmarking.bronze_aes;
-   SELECT count(*) FROM workspace.nz_industry_benchmarking.silver_aes_observations;
-   SELECT count(*) FROM workspace.nz_industry_benchmarking.gold_industry_financial_metrics;
-   ```
+- `workspace.nz_industry_benchmarking.bronze_aes`
+- `workspace.nz_industry_benchmarking.silver_aes_observations`
+- `workspace.nz_industry_benchmarking.gold_industry_financial_metrics`
 
-The first live run remains a manual verification because this repository has no
-access to the owner's Databricks workspace.
+Verified row and status counts:
+
+| Layer | Result |
+|---|---|
+| Bronze | 60,255 input rows; 60,255 total rows |
+| Silver | 60,255 input and output rows; 60,255 valid; 0 invalid |
+| Silver statuses | 57,674 `PUBLISHED`; 2,563 `CONFIDENTIAL`; 18 `SUPPRESSED` |
+| Data quality | 16 checks executed; 16 passed; 0 failed; overall `PASS` |
+| Quality rows | 60,255 processed; 60,255 accepted; 0 rejected |
+| Gold | 10,842 output rows |
+| Gold metrics | M1-M6 each contain 1,807 rows |
+| Gold statuses | 10,349 `PUBLISHED`; 32 `CONFIDENTIAL`; 461 `UNAVAILABLE_INPUT` |
+
+Verify all three tables after a run:
+
+```sql
+SELECT COUNT(*) FROM workspace.nz_industry_benchmarking.bronze_aes;
+SELECT COUNT(*) FROM workspace.nz_industry_benchmarking.silver_aes_observations;
+SELECT COUNT(*) FROM workspace.nz_industry_benchmarking.gold_industry_financial_metrics;
+```
+
+The verified Gold query returned `10,842`:
+
+```sql
+SELECT COUNT(*)
+FROM workspace.nz_industry_benchmarking.gold_industry_financial_metrics;
+```
+
+## Verified idempotent rerun
+
+The same Job was run again against the same CSV. The second successful run
+reported:
+
+- Bronze: `duplicate: true`, 60,255 input rows, 0 inserted rows, 60,255 total
+  rows.
+- Silver: `duplicate: true`, 60,255 output rows.
+- Gold: `duplicate: true`, 10,842 output rows.
+- Data quality: overall `PASS`, with 16 of 16 checks passed.
+
+This verifies that rerunning this already-ingested source does not duplicate
+Bronze records and that the Silver and Gold snapshots are reused. It does not
+prove every future incremental or revision scenario; managed-state migration
+for those workflows remains deferred.
+
+## Naming troubleshooting
+
+The similar names have different purposes:
+
+| Name type | Value | Use |
+|---|---|---|
+| Python distribution | `nz-industry-benchmarking` | Package metadata/build identity |
+| Python import package | `nz_industry_benchmarking` | `import nz_industry_benchmarking` |
+| Console script | `nz-industry-benchmarking-databricks` | Normal installed command-line execution |
+| Free Edition Job package name | `nz_industry_benchmarking` | Verified Job UI value |
+| Free Edition Job entry point | `databricks_job` | Verified package-level callable |
+
+Using the distribution name and hyphenated console-script name in the verified
+Free Edition Job UI caused Databricks to interpret the entry point as a Python
+attribute expression and fail. Use `nz_industry_benchmarking` and
+`databricks_job` for this environment.
+
+## Deferred work
+
+This deployment does not include scheduled ingestion, automated workspace
+deployment, credentials in the repository, a managed quality audit table,
+Databricks SQL API integration, Azure App Service, Azure Databricks, or the full
+incremental/revision workflow on managed storage.

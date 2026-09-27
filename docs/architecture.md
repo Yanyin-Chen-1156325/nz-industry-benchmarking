@@ -2,7 +2,7 @@
 
 ## Implemented data-product boundaries
 
-Phase 3 implements only the raw-file ingestion boundary:
+The implemented data-product flow is:
 
 ```text
 Configured Stats NZ AES CSV
@@ -216,7 +216,7 @@ The API uses an explicit configurable CORS allowlist for the independently serve
 local frontend. No wildcard origin, frontend framework, chart dependency, or
 state-management package is introduced. See [`frontend.md`](frontend.md).
 
-## Not implemented
+## Verified Databricks Free Edition execution
 
 Phase 15 Step 1 adds a storage boundary underneath the unchanged transformations:
 
@@ -234,11 +234,18 @@ Phase 15 Step 1 adds a storage boundary underneath the unchanged transformations
         LocalDeltaStorage             CatalogDeltaStorage
 ```
 
-The Databricks entry point covers only an initial Bronze -> Silver -> Gold load
-and an idempotent rerun of the same source artifact. It evaluates the existing
-Silver quality rules in memory and returns the report without introducing a
-temporary persistence design.
+This architecture has been executed manually as the `NZ Industry Benchmarking
+Pipeline` Python wheel Job on Databricks Free Edition Serverless. The source CSV
+was read from a Unity Catalog Volume and the shared transformations wrote three
+managed Delta tables in `workspace.nz_industry_benchmarking`.
 
-Databricks job deployment, authentication, quality audit-table persistence,
-incremental/revision managed state, Databricks SQL access, and Azure/API
-integration remain outside this step. See [`databricks.md`](databricks.md).
+The verified real-data run processed 60,255 Bronze and Silver rows, passed all
+16 quality checks, and produced 10,842 Gold rows. A second run of the same source
+inserted zero Bronze rows and reported the Bronze, Silver, and Gold outputs as
+duplicates, verifying idempotency for that already-ingested artifact.
+
+The Job has no schedule or automatic Stats NZ download. It is triggered manually
+when an approved annual source is available. Quality audit-table persistence,
+incremental/revision managed state, automated workspace deployment, Databricks
+SQL API access, Azure Databricks, Azure App Service, and cloud API integration
+remain outside this deployment. See [`databricks.md`](databricks.md).

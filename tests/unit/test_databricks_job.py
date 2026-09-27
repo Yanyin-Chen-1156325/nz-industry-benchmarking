@@ -7,12 +7,33 @@ from pathlib import Path
 
 import pytest
 
+import nz_industry_benchmarking
 import nz_industry_benchmarking.databricks.job as job
 
 SOURCE = (
     "/Volumes/workspace/nz_industry_benchmarking/source_files/"
     "annual-enterprise-survey-2025-financial-year-provisional.csv"
 )
+
+
+def test_package_root_exposes_callable_databricks_job() -> None:
+    assert callable(nz_industry_benchmarking.databricks_job)
+
+
+def test_package_root_databricks_job_delegates_to_existing_main(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls = 0
+
+    def main() -> None:
+        nonlocal calls
+        calls += 1
+
+    monkeypatch.setattr(job, "main", main)
+
+    nz_industry_benchmarking.databricks_job()
+
+    assert calls == 1
 
 
 def test_argument_defaults_match_initial_load_config() -> None:
