@@ -134,8 +134,9 @@ table through `databricks-sql-connector`, maps rows to the existing API records,
 and implements the Phase 8 ranking rules in parameterized Databricks SQL.
 
 The local `SparkGoldRepository` remains supported and is still the API startup
-default. Selecting the remote adapter at API startup is a separate deployment
-step and has not been enabled here.
+default. Set `NZIB_ANALYTICS_BACKEND=databricks-sql` to select the remote
+adapter explicitly; `NZIB_ANALYTICS_BACKEND=local-spark` selects the default
+local adapter. Any other value fails configuration instead of falling back.
 
 Create `DatabricksSqlConfig` directly or with `from_environment()`. The latter
 reads `DATABRICKS_SERVER_HOSTNAME`, `DATABRICKS_HTTP_PATH`, and
@@ -143,7 +144,10 @@ reads `DATABRICKS_SERVER_HOSTNAME`, `DATABRICKS_HTTP_PATH`, and
 `workspace`), `DATABRICKS_SCHEMA` (default `nz_industry_benchmarking`), and
 `DATABRICKS_GOLD_TABLE` (default `gold_industry_financial_metrics`). Keep all
 credentials in the local environment or a secret manager and never commit them
-to Git. External authenticated SQL connectivity and the 10,842-row managed Gold
-table were manually verified separately; this adapter's automated tests use
-only fake connections and do not contact Databricks. This is not an Azure
-deployment.
+to Git. When `databricks-sql` is selected, all three required connection values
+must be present or application construction fails with a sanitized error.
+Databricks SQL mode does not initialize or import Spark and is intended for a
+lightweight web runtime without PySpark, Delta, or Java. External authenticated
+SQL connectivity and the 10,842-row managed Gold table were manually verified
+separately; automated tests do not contact Databricks. Azure deployment is not
+complete.

@@ -13,8 +13,8 @@ from nz_industry_benchmarking.api.models import (
     MetricLineage,
     MetricObservation,
 )
+from nz_industry_benchmarking.api.protocols import AnalyticsRepository
 from nz_industry_benchmarking.api.records import BenchmarkRecord, MetricRecord
-from nz_industry_benchmarking.api.repository import AnalyticsRepository
 from nz_industry_benchmarking.benchmarking.models import BenchmarkRequest
 
 

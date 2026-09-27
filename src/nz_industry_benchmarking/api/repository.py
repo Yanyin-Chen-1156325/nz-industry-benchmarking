@@ -3,13 +3,13 @@
 from __future__ import annotations
 
 from collections.abc import Sequence
-from typing import Protocol
 
 from delta.tables import DeltaTable
 from pyspark.sql import DataFrame, SparkSession
 from pyspark.sql import functions as F
 
 from nz_industry_benchmarking.api.errors import AnalyticalStorageError
+from nz_industry_benchmarking.api.protocols import AnalyticsRepository
 from nz_industry_benchmarking.api.records import (
     BenchmarkRecord,
     IndustryRecord,
@@ -23,31 +23,7 @@ from nz_industry_benchmarking.benchmarking.transform import (
     validate_gold_benchmark_schema,
 )
 
-
-class AnalyticsRepository(Protocol):
-    """Minimal read contract required by the HTTP service."""
-
-    def list_industries(
-        self, *, year: int | None, aggregation_level: str | None
-    ) -> Sequence[IndustryRecord]: ...
-
-    def get_metrics(
-        self, *, industry_code: str, year: int, aggregation_level: str
-    ) -> Sequence[MetricRecord]: ...
-
-    def get_trend(
-        self,
-        *,
-        industry_code: str,
-        metric_id: str,
-        aggregation_level: str,
-        start_year: int | None,
-        end_year: int | None,
-    ) -> Sequence[MetricRecord]: ...
-
-    def get_benchmarks(
-        self, request: BenchmarkRequest
-    ) -> Sequence[BenchmarkRecord]: ...
+__all__ = ["AnalyticsRepository", "SparkGoldRepository"]
 
 
 class SparkGoldRepository:

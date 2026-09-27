@@ -1,459 +1,588 @@
 # NZ Industry Benchmarking Data Platform
 
-A portfolio-scale data product for comparing financial performance across New
-Zealand industries using the public Stats NZ Annual Enterprise Survey (AES).
+An end-to-end data engineering platform built with public Stats NZ Annual Enterprise Survey data, using Databricks, PySpark, and Delta Lake to transform raw statistical data into reliable, traceable, and consumable industry financial data products.
 
-The project demonstrates a Bronze/Silver/Gold pipeline with Python, PySpark,
-Delta Lake, Databricks Serverless, Unity Catalog, data-quality controls,
-automated tests, and a small REST API. It stays focused on industry benchmarking
-rather than becoming a large dashboard or machine-learning project.
+---
 
-## Current status
+## Overview
 
-Phase 15 migration Step 1 is deployed and verified in Databricks Free Edition.
-The repository currently contains:
+The **NZ Industry Benchmarking Data Platform** is a portfolio-scale data engineering project built using the **Stats NZ Annual Enterprise Survey (AES): 2025 financial year (provisional)** dataset.
 
-- the inspected AES 2025 provisional CSV in the local `data/raw/` directory;
-- documented dataset findings and limitations;
-- approved MVP business rules;
-- Python packaging, pytest, and Ruff configuration;
-- a repeatable raw CSV ingestion command with structured JSON logs;
-- an idempotent local ingestion manifest keyed by source SHA-256;
-- a PySpark Bronze writer that preserves all raw fields and attaches lineage;
-- an idempotent Delta table keyed logically by source SHA-256;
-- a typed, validated, one-row-in/one-row-out Silver Delta snapshot;
-- a PySpark quality framework with stable blocking and informational rules;
-- an inspectable JSON quality report with overall PASS/FAIL and row counts;
-- a Gold Delta metric fact table implementing the approved M1-M7 contract;
-- a read-only PySpark query layer for M4-M6 increases, decreases, and movements;
-- dependency-aware SHA-256/fingerprint planning with safe revision deferral;
-- release-aware Bronze history, Silver current-view selection, and revision audit;
-- a risk-mapped unit, data-quality/contract, and integration test strategy;
-- a typed read-only FastAPI over Gold metrics, trends, and Phase 8 rankings;
-- generated OpenAPI documentation and safe, consistent HTTP errors;
-- a responsive static frontend for performance, trends, statuses, and rankings;
-- GitHub Actions validation with separate fast, Spark/Delta, and frontend jobs;
-- a verified Databricks Free Edition Serverless Python wheel Job;
-- Unity Catalog Volume input and Bronze/Silver/Gold managed Delta tables;
-- a verified 60,255-row real-data run and idempotent rerun;
-- reserved automated deployment and incremental managed-state boundaries.
+The project implements an end-to-end workflow from raw CSV ingestion to curated analytical data products.
 
-The Databricks Job is manually triggered and has no schedule. No workspace
-credentials or automated deployment workflow are stored in the repository.
+Rather than focusing on a large dashboard, the project demonstrates the engineering practices required to build a reliable and maintainable modern data platform, including:
 
-## Business questions
+- Python data ingestion and source validation
+- PySpark transformations
+- Bronze / Silver / Gold Medallion Architecture
+- Delta Lake storage
+- Data quality and contract validation
+- Metadata and data lineage
+- Idempotent and incremental processing
+- Statistical revision handling
+- Industry benchmarking
+- REST API
+- Automated testing
+- GitHub Actions CI
+- Databricks Serverless deployment
 
-The final product is intended to answer:
+The resulting data product enables users to compare financial performance across New Zealand industries, explore historical trends, and identify significant year-over-year changes.
 
-1. How does financial performance compare across industries?
+---
+
+## Business Problem
+
+The Stats NZ Annual Enterprise Survey provides extensive financial statistics about New Zealand industries.
+
+However, raw statistical data still requires validation, standardisation, business-rule transformation, and appropriate handling of protected values before it can be reliably consumed by analytical tools or applications.
+
+This project addresses four core business questions:
+
+1. How does financial performance compare across New Zealand industries?
 2. How has an industry's financial performance changed over time?
 3. Which financial indicators changed the most?
 4. Can users trust the published results?
 
-The approved MVP uses Stats NZ's published total income (H01), surplus before
-income tax (H23), and return on total assets (H40), plus focused year-over-year
-changes and an explicit availability status.
+All business metrics are derived from fields available in the inspected AES dataset. The project does not create metrics that cannot be supported by the source data.
 
-## Data source
+---
 
-The source is **Annual enterprise survey: 2025 financial year (provisional)**,
-published by Stats NZ Tatauranga Aotearoa. The local CSV contains aggregate
-industry observations for 2013–2025. It is not business-level data.
+## Data Source
 
-See [dataset discovery](docs/dataset.md) for the exact source, schema, checksum,
-confidentiality markers, and limitations. See
-[business rules](docs/business-rules.md) for the approved metrics.
+**Dataset:** Stats NZ — Annual Enterprise Survey: 2025 financial year (provisional)
 
-The CSV is intentionally ignored by Git. Download it from the official URL in
-`.env.example` and place it at the configured `AES_SOURCE_FILE` path.
+The project uses publicly released aggregate industry data rather than business-level or private administrative data.
 
-## Raw ingestion
+The dataset contains:
 
-Run the Phase 3 ingestion command from the repository root:
+- Data from 2013 to 2025
+- 60,255 source observations
+- Multiple NZSIOC industry aggregation levels
+- Financial measures
+- Confidential (`C`) values
+- Suppressed (`S`) values
 
-```powershell
-python -m nz_industry_benchmarking.ingestion
-```
+The official Stats NZ CSV is not committed to the Git repository.
 
-The command:
+Dataset schema, source information, checksum, dimensions, measures, and known limitations are documented in:
 
-- reads the configured AES CSV as UTF-8 CSV;
-- enforces the Phase 0 header contract;
-- preserves every source field, including `Value`, as text;
-- calculates the exact source-file SHA-256;
-- records source, dataset, row-count, timestamp, and schema metadata;
-- emits structured JSON logs;
-- writes one logical record per source artifact to
-  `data/ingestion/manifest.json`.
+[`docs/dataset.md`](docs/dataset.md)
 
-The manifest and CSV are local artifacts and are ignored by Git. Re-running the
-command for the same source hash returns `status: duplicate`, retains the first
-logical ingestion timestamp, and does not add another manifest record.
-
-Defaults come from the values documented in `.env.example`. Settings can be
-exported as environment variables or overridden with CLI options; use
-`python -m nz_industry_benchmarking.ingestion --help` for the complete list.
-The project does not automatically parse a local `.env` file and therefore does
-not require a dotenv runtime dependency.
-
-## Bronze Delta
-
-Install Java 17 or newer, set `JAVA_HOME`, and run from the repository root:
-
-```powershell
-python -m nz_industry_benchmarking.bronze
-```
-
-The command uses the approved ingestion output as its source boundary, creates a
-PySpark DataFrame with every source column kept as a string, adds ingestion and
-row-lineage metadata, and writes Delta format to `data/bronze/aes` by default.
-Re-running the same source SHA-256 reports `duplicate: true`, inserts zero rows,
-and verifies that the previously stored logical ingestion is complete.
-
-Python 3.11+ is supported. Phase 4 pins PySpark 4.2.0 and Delta Lake 4.4.0 because
-those releases are mutually compatible and support the project's local Python
-3.13 environment. Spark 4.2 requires Java 17 or newer. No Pandas or PyArrow extras
-are needed for this row-preserving Bronze implementation.
-
-Configuration is available through the variables in `.env.example` or CLI
-arguments; use `python -m nz_industry_benchmarking.bronze --help` for details.
-The local source, ingestion manifest, Bronze table, and `.tools` directory are
-ignored by Git.
-
-Delta normally resolves its JVM artifacts from Maven on first use. In an offline
-or certificate-intercepted environment, `DELTA_SPARK_LOCAL_JARS` can point to an
-isolated directory containing compatible Delta runtime JARs; it is not needed in
-a normal environment. Do not point it at a broad dependency cache containing
-conflicting Spark libraries.
-
-Native Windows local-file Delta writes also require Hadoop's Windows native
-runtime (`winutils.exe`). This repository's Phase 4 Delta write and tests were
-verified with Ubuntu WSL instead, using the same project code and an isolated
-Java/Python environment. Linux and Databricks do not have the Windows-specific
-`winutils.exe` requirement.
-
-After writing Bronze, the implemented verification command is:
-
-```powershell
-python scripts/verify_bronze.py
-```
-
-It reads the Delta table and reports its row count, exact column contract,
-source-column types, `C`/`S` counts, and distinct ingestion metadata.
-
-## Silver processing
-
-Run the Bronze-only Silver transformation with:
-
-```powershell
-python -m nz_industry_benchmarking.silver
-```
-
-Silver parses year and numeric values, preserves raw values and labels,
-classifies `C`, `S`, unavailable, and invalid states, and attaches inspectable
-validation outcomes. Every Bronze row remains present. Reprocessing the same set
-of Bronze artifacts verifies and skips the existing logical snapshot.
-
-The default output is `data/silver/aes_observations`. Verify it with:
-
-```powershell
-python scripts/verify_silver.py
-```
-
-## Data quality
-
-Assess the persisted Silver Delta table with:
-
-```powershell
-python -m nz_industry_benchmarking.quality
-```
-
-The command checks schema, completeness, validity, uniqueness, and contract
-consistency. It prints and atomically persists a JSON report at
-`data/quality/silver-quality-report.json` by default. A failed blocking check
-returns overall `FAIL` and CLI exit code 1. Legitimate `C`, `S`, and negative
-published values are validated and counted but do not fail the dataset.
-
-The actual AES Silver snapshot passed all 16 checks: 60,255 rows processed,
-60,255 accepted, and zero rejected. Informational counts were 2,563
-confidential, 18 suppressed, and 127 negative published rows. See
-[data quality](docs/data-quality.md) for every rule and its severity.
-
-## Gold analytics
-
-Calculate the approved M1-M7 business metrics from Silver with:
-
-```powershell
-python -m nz_industry_benchmarking.gold
-```
-
-The command writes one long-format Delta table to
-`data/gold/industry_financial_metrics`. Its grain is Silver snapshot, year,
-NZSIOC aggregation level, industry code, and metric ID. M1-M3 are exact H01,
-H23, and H40 published measures; M4-M6 compare only the immediately preceding
-year for the same aggregation level and industry. `metric_status` implements M7
-and keeps protected, unavailable, invalid, and non-meaningful results explicit.
-
-The actual snapshot contains 10,842 rows: 1,807 rows for each of M1-M6. Verify
-the grain, statuses, lineage, and Phase 1 acceptance examples with:
-
-```powershell
-python scripts/verify_gold.py
-```
-
-Re-running unchanged Silver input reports `duplicate: true` and retains the
-first persisted Gold processing timestamp.
-
-## Industry benchmarking
-
-Query the Gold Delta table without creating another persisted copy:
-
-```powershell
-python -m nz_industry_benchmarking.benchmarking `
-  --year 2025 `
-  --metric-id M4 `
-  --aggregation-level "Level 1" `
-  --ranking-type top_increases `
-  --top-n 5
-```
-
-Supported ranking types are `top_increases` (positive values descending),
-`top_decreases` (negative values ascending), and `largest_movements` (absolute
-magnitude descending while returning the signed value). Only `PUBLISHED` M4,
-M5, or M6 rows are eligible. Every ranking is isolated by year, metric, and
-NZSIOC aggregation level, so units and aggregation levels never mix.
-
-Equal primary values are ordered by industry code, industry name, then Gold
-`metric_record_id`, all ascending. `rank_position` is therefore a stable unique
-ordinal rather than a shared competition rank. Run actual-data verification:
-
-```powershell
-python scripts/verify_benchmarks.py
-```
-
-The bounded JSON result is used by the API adapter and retains Gold and source
-lineage. The query layer is intentionally read-only: there is no benchmark
-Delta table to synchronize or deduplicate.
-
-## REST API
-
-Start the read-only FastAPI application after Gold has been created:
-
-```powershell
-python -m nz_industry_benchmarking.api
-```
-
-The default API is served at `http://127.0.0.1:8000`, with interactive OpenAPI
-documentation at `/docs`. It exposes health, available industries, annual
-performance, chronological trends, and M4-M6 benchmark rankings. One Spark
-session is shared for the application lifespan; request handlers do not create
-sessions or implement metric/ranking formulas.
-
-Protected and otherwise non-published observations retain their Gold status and
-serialize with `metric_value: null`, never zero. Validation, no-data, storage,
-and unexpected failures use consistent safe error bodies. See the complete
-[API contract](docs/api.md).
-
-## Minimal frontend
-
-Serve the dependency-free browser client in a second terminal while the API is
-running:
-
-```powershell
-python -m http.server 5173 --directory frontend
-```
-
-Open `http://127.0.0.1:5173`. The UI obtains aggregation-specific industries and
-available years from the API, presents M1-M6 performance and chronological
-trends, and supports all three M4-M6 ranking modes. Protected and unavailable
-values appear as named statuses rather than zero.
-
-Set the API base URL in `frontend/config.js`; set the matching explicit API
-origin allowlist through `API_CORS_ORIGINS`. See the [frontend guide](docs/frontend.md)
-for behavior, local commands, tests, and limitations.
-
-## Incremental processing
-
-Run the existing stages only when their effective inputs changed:
-
-```powershell
-python -m nz_industry_benchmarking.incremental
-```
-
-The planner uses source SHA-256 rather than filename identity. It reports each
-layer as `CURRENT`, `REQUIRED`, or `DEFERRED`, and returns an overall `NO_OP`,
-`PROCESS_REQUIRED`, or `DEFERRED_REVISION` result. An unchanged current source
-does not invoke any Bronze, Silver, or Gold writer.
-
-New artifacts with no observation-grain overlap are appended once to Bronze;
-the existing deterministic Silver and Gold snapshot writers rebuild only when
-their effective input fingerprints are stale. Any overlap with Bronze is safely
-deferred because release precedence belongs to Phase 10. See
-[incremental operations](docs/incremental-processing.md) for exact behavior and
-limitations.
-
-Verify that the actual AES source and all downstream layers are current:
-
-```powershell
-python scripts/verify_incremental.py
-```
-
-## Revision handling
-
-Process an officially identified newer release that Phase 9 deferred because it
-overlaps existing observations:
-
-```powershell
-python -m nz_industry_benchmarking.revision
-```
-
-Release precedence uses only the approved integer `dataset_year`: it must be
-strictly greater for every overlapping current observation. Filename, SHA-256,
-ingestion time, and free-form version text are never sorted to invent authority.
-Equal-year artifacts remain `DEFERRED_AMBIGUOUS`.
-
-Bronze retains both source artifacts. Silver selects one current row per AES
-observation grain, while prior lineage remains in Bronze and the revision audit
-under `data/revisions/`. Missing observations are retained from the previous
-release, not treated as deletions. Gold rebuilds only after the effective Silver
-snapshot changes. See [revision handling](docs/revision-handling.md).
-
-The repository contains only one inspected real Stats NZ artifact. Verify that
-it remains unchanged and produces no revision write with:
-
-```powershell
-python scripts/verify_revision.py
-```
+---
 
 ## Architecture
 
 ```text
-Stats NZ AES CSV
-      |
-      v
-Python ingestion -> Bronze Delta -> PySpark validation -> Silver Delta
-                                                            |
-                                                            v
-                                                    Quality PASS/FAIL
-                                                            |
-                                                            v
-                                                  M1-M7 Gold Delta
-                                                         |
-                                              +----------+----------+
-                                              |                     |
-                                              v                     v
-                                       Metric/trend queries   Benchmark queries
-                                                                    (M4-M6)
-                                              |                     |
-                                              +----------+----------+
-                                                         v
-                                                   REST API
-                                                         |
-                                                         v
-                                                Minimal frontend
+Stats NZ AES Public Data
+          |
+          v
+   Python Ingestion
+          |
+          v
+     Bronze Delta
+          |
+          v
+   PySpark Validation
+          |
+          v
+     Silver Delta
+          |
+     +----+----+
+     |         |
+     v         v
+Data Quality  Business Rules
+ PASS / FAIL       |
+                   v
+              Gold Delta
+                   |
+        +----------+----------+
+        |                     |
+        v                     v
+ Metric / Trend        Benchmark Queries
+     Queries                 M4-M6
+        |                     |
+        +----------+----------+
+                   |
+                   v
+                FastAPI
+                   |
+                   v
+             Web Frontend
 ```
 
-Ingestion, Bronze, Silver, quality, Gold metrics, benchmarking, incremental
-planning, revision handling, automated testing, and the REST API are implemented
-together with the minimal frontend. The shared Bronze-to-Gold pipeline has also
-been executed as a Python wheel Job on Databricks Free Edition Serverless;
-automated cloud deployment and Azure integration remain later-phase targets.
-
-## Verified Databricks deployment
-
-The real 60,255-row Stats NZ AES 2025 provisional CSV was processed from a Unity
-Catalog Volume by the manually triggered `NZ Industry Benchmarking Pipeline`
-Python wheel Job. The run produced 60,255 valid Silver rows, passed all 16 data
-quality checks, and wrote 10,842 Gold metric rows to managed Delta tables. A
-second run detected the same source, inserted zero Bronze rows, and reused the
-Silver and Gold snapshots.
-
-This verifies PySpark, Delta Lake, Databricks Serverless, Unity Catalog,
-Bronze/Silver/Gold processing, data quality, idempotent ingestion, Python wheel
-deployment, and Databricks Jobs against the public Stats NZ dataset. See the
-[Databricks deployment runbook](docs/databricks.md) for the exact environment,
-Job values, parameters, results, SQL checks, and current limitations.
-
-## Local setup
-
-Python 3.11 or newer and Java 17 or newer are required.
-
-```powershell
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-python -m pip install --upgrade pip
-python -m pip install -e ".[dev,local-spark]"
-Copy-Item .env.example .env
-```
-
-The `local-spark` extra installs PySpark and Delta Lake for local execution.
-They are deliberately absent from the base install because Databricks provides
-its own compatible Spark runtime. FastAPI and Uvicorn remain base runtime
-dependencies; pytest, Ruff, and HTTPX2 are installed through the `dev` extra.
-
-For the verified Databricks Bronze -> Silver -> Gold deployment, see the
-[Databricks deployment runbook](docs/databricks.md).
-
-The frontend has no third-party packages. Node.js is used only for its built-in
-test runner, JavaScript syntax checks, and the copy-only static build.
-
-## Verification
-
-```powershell
-python -m pytest
-ruff check .
-```
-
-The backend suite contains 89 collected tests. Five additional Node tests cover
-the frontend API adapter and presentation rules. The suites use synthetic
-fixtures and temporary Delta paths;
-the normal suite does not process the full official AES file. The Phase 9 and
-Phase 10 integration cases provide the end-to-end smoke path across CSV
-ingestion, Bronze, Silver, and Gold. See the [testing strategy](docs/testing.md)
-for the inventory, coverage decisions, isolation guarantees, and intentional
-limitations.
-
-## Continuous integration
-
-GitHub Actions runs on pull requests and pushes to `main`. Independent jobs
-provide fast backend feedback, one non-duplicated Spark/Delta test pass, and the
-existing dependency-free frontend test/lint/build checks. CI uses Python 3.13,
-Java 17, and Node.js 22 and never requires the ignored official AES CSV. See the
-[CI guide](docs/ci.md) for exact commands, triggers, permissions, dependency
-resolution, and the automated deployment boundary.
-
-## Repository structure
+Databricks execution architecture:
 
 ```text
-.
-|-- .github/workflows/              # CI workflows added in Phase 14
-|-- data/raw/                       # Local official source file; CSV ignored
-|-- databricks/
-|   |-- bronze/
-|   |-- silver/
-|   `-- gold/
-|-- docs/
-|-- frontend/                       # Static Phase 13 API consumer
-|-- scripts/
-|-- src/nz_industry_benchmarking/
-|   |-- api/
-|   |-- benchmarking/
-|   |-- bronze/
-|   |-- gold/
-|   |-- incremental/
-|   |-- ingestion/
-|   |-- quality/
-|   |-- revision/
-|   |-- silver/
-|   |-- transformation/
-|   `-- validation/
-|-- tests/
-|   |-- data_quality/
-|   |-- integration/
-|   `-- unit/
-|-- .env.example
-`-- pyproject.toml
+Unity Catalog Volume
+        |
+        v
+Databricks Serverless Job
+        |
+        v
+Bronze Managed Delta
+        |
+        v
+Silver Managed Delta
+        |
+        v
+Gold Managed Delta
 ```
 
-The directories mark component boundaries; empty areas are reserved for their
-approved implementation phases.
+---
+
+## Data Pipeline
+
+### Bronze Layer
+
+The Bronze layer preserves the Stats NZ source data with minimal transformation and provides the foundation for traceability.
+
+It:
+
+- Preserves all source fields
+- Retains raw values as text
+- Records ingestion metadata
+- Calculates the source SHA-256
+- Adds row-level lineage
+- Stores data in Delta format
+- Prevents duplicate logical ingestion of the same source
+
+SHA-256 is used to identify the actual source artifact, so source identity does not depend on the filename.
+
+### Silver Layer
+
+The Silver layer uses PySpark to standardise and validate Bronze data.
+
+Processing includes:
+
+- Year parsing
+- Numeric conversion
+- Missing-value handling
+- Confidential value handling
+- Suppressed value handling
+- Invalid-state classification
+- Duplicate detection
+- Validation metadata
+
+Silver follows a **one-row-in / one-row-out** design.
+
+Source observations are not silently discarded because they are protected, unavailable, or invalid. Their values and validation states remain traceable through the pipeline.
+
+### Gold Layer
+
+The Gold layer transforms validated Silver observations into business metrics that directly support analytics and API consumption.
+
+The current metric contract includes:
+
+| Metric | Description |
+| --- | --- |
+| M1 | Total Income |
+| M2 | Surplus Before Income Tax |
+| M3 | Return on Total Assets |
+| M4 | Total Income YoY Change |
+| M5 | Surplus Before Income Tax YoY Change |
+| M6 | Return on Total Assets YoY Change |
+| M7 | Metric Availability Status |
+
+The main Gold grain is:
+
+```text
+Silver Snapshot
++ Year
++ NZSIOC Aggregation Level
++ Industry
++ Metric
+```
+
+Confidential, suppressed, unavailable, or invalid observations are not converted to zero. Their status remains explicit in the Gold data product.
+
+---
+
+## Data Quality
+
+Data quality is part of the pipeline rather than an after-the-fact validation step.
+
+The quality framework covers:
+
+- Schema validation
+- Completeness checks
+- Data type validation
+- Value validation
+- Business-key uniqueness
+- Metric contract validation
+- Statistical status handling
+
+Verified results for the real AES dataset:
+
+| Measure | Result |
+| --- | ---: |
+| Rows processed | 60,255 |
+| Rows accepted | 60,255 |
+| Rows rejected | 0 |
+| Confidential observations | 2,563 |
+| Suppressed observations | 18 |
+| Negative published values | 127 |
+| Data quality checks | **16 / 16 PASS** |
+
+Legitimate confidential, suppressed, and negative published values are identified and tracked without being incorrectly treated as data-quality failures.
+
+The complete quality rules are documented in:
+
+[`docs/data-quality.md`](docs/data-quality.md)
+
+---
+
+## Industry Benchmarking
+
+The Gold data product supports cross-industry and year-over-year benchmarking.
+
+The benchmarking layer provides three ranking modes:
+
+- **Top Increases** — industries with the largest positive year-over-year changes
+- **Top Decreases** — industries with the largest negative year-over-year changes
+- **Largest Movements** — industries with the largest absolute changes while retaining the signed value
+
+Benchmarking is limited to published M4-M6 metrics.
+
+Every comparison is isolated by:
+
+- Year
+- Metric
+- NZSIOC aggregation level
+
+This prevents values with different units or aggregation levels from being incorrectly compared.
+
+---
+
+## Incremental Processing
+
+The pipeline uses source SHA-256 and downstream fingerprints to determine whether processing is required.
+
+Each processing layer can be classified as:
+
+```text
+CURRENT
+REQUIRED
+DEFERRED
+```
+
+The overall planner returns:
+
+```text
+NO_OP
+PROCESS_REQUIRED
+DEFERRED_REVISION
+```
+
+When exactly the same source is processed again:
+
+```text
+First Run
+    |
+    v
+Process Source
+    |
+    v
+Bronze -> Silver -> Gold
+
+Second Run
+    |
+    v
+Same Source SHA-256
+    |
+    v
+No Duplicate Bronze Rows
+    |
+    v
+Reuse Existing Silver / Gold
+```
+
+This provides idempotent processing and avoids unnecessary downstream work.
+
+---
+
+## Revision Handling
+
+Published statistical datasets may be revised after their initial release.
+
+The pipeline therefore distinguishes between new data and revised statistical releases.
+
+Bronze retains source history, while Silver selects the current observation according to explicit release-precedence rules.
+
+```text
+Source Releases
+      |
+      v
+Bronze History
+      |
+      v
+Current Silver Snapshot
+      |
+      v
+Gold Metrics
+```
+
+Release precedence uses the approved `dataset_year` rather than inferring authority from:
+
+- Filename
+- Ingestion timestamp
+- SHA-256
+- Free-form version text
+
+This allows historical source lineage and revision audit information to remain traceable.
+
+---
+
+## REST API
+
+The Gold data product is exposed through a read-only FastAPI application so that the frontend or other applications can consume processed data.
+
+The API supports:
+
+- Health checks
+- Available industries
+- Annual industry performance
+- Historical trends
+- Benchmark rankings
+
+It provides:
+
+- Typed response models
+- Request validation
+- Consistent HTTP errors
+- OpenAPI documentation
+- Gold metric status preservation
+
+Protected or unavailable observations are represented explicitly, for example:
+
+```json
+{
+  "metric_value": null,
+  "metric_status": "CONFIDENTIAL"
+}
+```
+
+rather than being incorrectly represented as zero.
+
+The complete API contract is documented in:
+
+[`docs/api.md`](docs/api.md)
+
+---
+
+## Web Application
+
+The project includes a lightweight web frontend to demonstrate how the Gold data product can be consumed through the REST API.
+
+Users can:
+
+- Select an industry
+- Select a year
+- View M1-M6 financial metrics
+- Explore historical trends
+- View industry rankings
+- See data availability status
+
+The frontend is intentionally small. Its purpose is to demonstrate the complete consumption path:
+
+```text
+Data Pipeline
+      |
+      v
+Gold Data Product
+      |
+      v
+REST API
+      |
+      v
+Web Application
+```
+
+> **Live Demo:** Coming soon
+
+---
+
+## Databricks Deployment
+
+The Bronze → Silver → Gold pipeline has been deployed and verified on **Databricks Free Edition using Serverless compute**.
+
+The deployment uses:
+
+- Python Wheel
+- Databricks Job
+- Serverless compute
+- Unity Catalog Volume
+- Unity Catalog managed Delta tables
+
+Verified results from the real AES 2025 provisional dataset:
+
+| Measure | Result |
+| --- | ---: |
+| Source rows | 60,255 |
+| Silver rows | 60,255 |
+| Data quality checks | **16 / 16 PASS** |
+| Gold metric rows | 10,842 |
+
+An idempotent rerun of the same dataset produced:
+
+| Measure | Result |
+| --- | ---: |
+| New Bronze rows | 0 |
+| Silver snapshot | Reused |
+| Gold snapshot | Reused |
+
+This verifies the pipeline's data processing and idempotent behaviour in a Databricks environment.
+
+The Databricks Job is currently triggered manually. Production scheduling and automated cloud deployment are outside the current project scope.
+
+Detailed Databricks configuration and verification steps are documented in:
+
+[`docs/databricks.md`](docs/databricks.md)
+
+---
+
+## Automated Testing
+
+The project includes:
+
+- Unit tests
+- Transformation tests
+- Data quality tests
+- Contract tests
+- Integration tests
+- API tests
+- Frontend tests
+
+Current test coverage includes:
+
+- **89 Python tests**
+- **5 frontend tests**
+
+Integration tests validate the processing path:
+
+```text
+CSV
+ |
+ v
+Ingestion
+ |
+ v
+Bronze
+ |
+ v
+Silver
+ |
+ v
+Gold
+```
+
+Tests use synthetic fixtures and temporary Delta paths, so the normal CI suite does not require the full official AES dataset.
+
+---
+
+## Continuous Integration
+
+GitHub Actions automatically validates the project on pull requests and pushes to `main`.
+
+CI is separated into:
+
+```text
+Fast Backend Checks
+        +
+Spark / Delta Tests
+        +
+Frontend Test / Lint / Build
+```
+
+The CI environment uses:
+
+- Python 3.13
+- Java 17
+- Node.js 22
+
+CI does not require Databricks credentials or the official Stats NZ CSV.
+
+This keeps source-code validation independent from cloud deployment credentials.
+
+---
+
+## Technology Stack
+
+| Area | Technology |
+| --- | --- |
+| Programming | Python |
+| Data Processing | PySpark |
+| Data Platform | Databricks |
+| Storage | Delta Lake |
+| Data Catalog | Unity Catalog |
+| Query | SQL / PySpark |
+| API | FastAPI |
+| Testing | pytest |
+| Linting | Ruff |
+| CI | GitHub Actions |
+| Frontend | HTML / CSS / JavaScript |
+| Packaging | Python Wheel |
+| Version Control | Git / GitHub |
+
+---
+
+## Key Engineering Decisions
+
+### Preserve Statistical Meaning
+
+Confidential, suppressed, missing, and invalid observations are not simply converted to zero.
+
+### Separation of Concerns
+
+Ingestion, validation, transformation, quality checks, and business logic are separated so that each stage has a clear responsibility.
+
+### Idempotent Processing
+
+Source identity and processing fingerprints are used to prevent unnecessary duplicate processing.
+
+### Data Lineage
+
+Source and processing metadata are retained so that Gold results can be traced back through the pipeline.
+
+### Dataset-Driven Business Rules
+
+Business metrics are implemented only when they are supported by the inspected AES dataset.
+
+### Quality as Part of the Pipeline
+
+Data quality is integrated into the processing workflow rather than treated as a final manual check.
+
+---
+
+## Limitations
+
+This is a portfolio-scale data platform rather than a production Stats NZ system.
+
+Current limitations include:
+
+- Only publicly available AES aggregate data is used
+- No Stats NZ internal or private administrative data sources are used
+- Databricks Free Edition is used for the cloud data pipeline
+- The Databricks Job is manually triggered
+- Production scheduling is not configured
+- Production monitoring and alerting infrastructure is not implemented
+- Automated Databricks deployment is not implemented
+- Production cloud deployment of the API and frontend is not yet complete
+- Only one inspected real Stats NZ source release is currently available, so the revision framework has not yet been validated against multiple real revised releases
+
+These limitations are documented explicitly to avoid presenting a portfolio implementation as a production system.
+
+---
+
+## Future Improvements
+
+Potential future improvements include:
+
+- Azure-hosted REST API
+- Azure-hosted web frontend
+- Databricks Asset Bundles
+- Automated Databricks deployment
+- Scheduled Databricks Workflows
+- Production monitoring and alerting
+- Additional AES releases
+- Additional revision scenarios
+- Additional governed Gold data products

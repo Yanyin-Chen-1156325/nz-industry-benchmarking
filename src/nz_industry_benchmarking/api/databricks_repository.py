@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 import re
 from collections.abc import Callable, Mapping, Sequence
@@ -389,9 +390,16 @@ def _optional_string(value: object) -> str | None:
 def _string_tuple(value: object) -> tuple[str, ...]:
     if value is None:
         return ()
-    if not isinstance(value, (list, tuple)):
-        raise TypeError("Expected an array value.")
-    return tuple(str(item) for item in value)
+    if isinstance(value, str):
+        try:
+            value = json.loads(value)
+        except json.JSONDecodeError:
+            raise TypeError("Expected an array of strings.") from None
+    if not isinstance(value, (list, tuple)) or not all(
+        isinstance(item, str) for item in value
+    ):
+        raise TypeError("Expected an array of strings.")
+    return tuple(value)
 
 
 def _required_datetime(value: object) -> datetime:

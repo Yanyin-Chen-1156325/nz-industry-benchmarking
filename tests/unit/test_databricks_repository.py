@@ -10,6 +10,7 @@ import pytest
 from nz_industry_benchmarking.api.databricks_repository import (
     DatabricksSqlAnalyticsRepository,
     DatabricksSqlConfig,
+    _string_tuple,
 )
 from nz_industry_benchmarking.api.errors import AnalyticalStorageError
 from nz_industry_benchmarking.benchmarking.models import BenchmarkRequest
@@ -184,7 +185,9 @@ def test_get_metrics_binds_filters_and_preserves_record_types(
             metric_value=None,
             metric_status="CONFIDENTIAL",
             current_input_status="CONFIDENTIAL",
-            source_silver_record_ids=["silver-1", "silver-2"],
+            source_silver_record_ids='["silver-1","silver-2"]',
+            source_ingestion_ids='["ingestion-1"]',
+            source_sha256s=f'["{"A" * 64}"]',
         ),
         _metric_row(
             metric_record_id="metric-2",
@@ -208,8 +211,65 @@ def test_get_metrics_binds_filters_and_preserves_record_types(
     assert records[0].current_input_status == "CONFIDENTIAL"
     assert records[0].prior_input_status is None
     assert records[0].source_silver_record_ids == ("silver-1", "silver-2")
+    assert records[0].source_ingestion_ids == ("ingestion-1",)
+    assert records[0].source_sha256s == ("A" * 64,)
     assert records[1].metric_value == Decimal("123.4500")
     assert isinstance(records[1].metric_value, Decimal)
+
+
+@pytest.mark.parametrize(
+    ("connector_value", "expected"),
+    [
+        ('["id1","id2"]', ("id1", "id2")),
+        ("[]", ()),
+        (["id1", "id2"], ("id1", "id2")),
+        (("id1", "id2"), ("id1", "id2")),
+        (None, ()),
+    ],
+)
+def test_string_array_connector_representations_are_mapped(
+    connector_value: object, expected: tuple[str, ...]
+) -> None:
+    assert _string_tuple(connector_value) == expected
+
+
+@pytest.mark.parametrize(
+    "connector_value",
+    [
+        "hello",
+        '"hello"',
+        "123",
+        '{"a": 1}',
+        "[1, 2]",
+        '["id1"',
+        '["id1", null]',
+    ],
+)
+def test_invalid_string_array_connector_values_are_rejected(
+    connector_value: str,
+) -> None:
+    with pytest.raises(TypeError, match="Expected an array of strings"):
+        _string_tuple(connector_value)
+
+
+def test_benchmark_maps_json_string_representations_for_all_array_fields(
+    config: DatabricksSqlConfig,
+) -> None:
+    row = list(
+        _benchmark_row(ranking_type="largest_movements", rank=1, code="AA", value="-8")
+    )
+    row[13] = '["silver-1","silver-2"]'
+    row[14] = '["ingestion-1"]'
+    row[15] = f'["{"A" * 64}"]'
+    repository, _ = _repository(config, [tuple(row)])
+
+    records = repository.get_benchmarks(
+        BenchmarkRequest(2025, "M4", "Level 1", "largest_movements", 1)
+    )
+
+    assert records[0].source_silver_record_ids == ("silver-1", "silver-2")
+    assert records[0].source_ingestion_ids == ("ingestion-1",)
+    assert records[0].source_sha256s == ("A" * 64,)
 
 
 def test_get_trend_binds_optional_bounds_and_orders_by_year(

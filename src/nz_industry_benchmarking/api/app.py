@@ -3,11 +3,9 @@
 from __future__ import annotations
 
 import logging
-import signal
-import threading
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Annotated
+from typing import TYPE_CHECKING, Annotated
 
 from fastapi import FastAPI, Path, Query, Request
 from fastapi.exceptions import RequestValidationError
@@ -33,12 +31,11 @@ from nz_industry_benchmarking.api.models import (
     MetricId,
     RankingType,
 )
-from nz_industry_benchmarking.api.repository import (
-    AnalyticsRepository,
-    SparkGoldRepository,
-)
+from nz_industry_benchmarking.api.repository_provider import configured_repository
 from nz_industry_benchmarking.api.service import AnalyticsService
-from nz_industry_benchmarking.bronze.spark import create_spark_session
+
+if TYPE_CHECKING:
+    from nz_industry_benchmarking.api.protocols import AnalyticsRepository
 
 LOGGER = logging.getLogger("nz_industry_benchmarking.api")
 ERROR_RESPONSES = {
@@ -63,31 +60,13 @@ def create_app(
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        spark = None
         if repository is None:
-            # PySpark installs its own SIGINT handler on the main thread. Restore
-            # Uvicorn's handler so Ctrl+C follows the ASGI shutdown lifecycle.
-            main_thread = threading.current_thread() is threading.main_thread()
-            previous_sigint = signal.getsignal(signal.SIGINT) if main_thread else None
-            try:
-                spark = create_spark_session(
-                    master=settings.benchmark.spark_master,
-                    app_name="nz-industry-benchmarking-api",
-                )
-            finally:
-                if main_thread and previous_sigint is not None:
-                    signal.signal(signal.SIGINT, previous_sigint)
-            spark.sparkContext.setLogLevel(settings.benchmark.spark_log_level)
-            app.state.analytics_repository = SparkGoldRepository(
-                spark, settings.benchmark
-            )
+            with configured_repository(settings) as selected_repository:
+                app.state.analytics_repository = selected_repository
+                yield
         else:
             app.state.analytics_repository = repository
-        try:
             yield
-        finally:
-            if spark is not None:
-                spark.stop()
 
     application = FastAPI(
         title="NZ Industry Benchmarking API",
