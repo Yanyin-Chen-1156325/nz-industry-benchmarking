@@ -2,29 +2,32 @@
 
 An end-to-end data engineering platform built with public Stats NZ Annual Enterprise Survey data, using Databricks, PySpark, and Delta Lake to transform raw statistical data into reliable, traceable, and consumable industry financial data products.
 
+> **Live Demo:** [https://nz-industry-benchmarking.vercel.app/](https://nz-industry-benchmarking.vercel.app/)
+
+## Key Results
+
+| Outcome | Verified result |
+| --- | --- |
+| Source processing | 60,255 Stats NZ AES observations |
+| Data quality | 16 / 16 checks passed |
+| Curated output | 60,255 Silver rows and 10,842 Gold metric rows |
+| Idempotency | Same-source rerun inserted 0 Bronze rows and reused Silver / Gold |
+| Data platform | Databricks Serverless, Delta Lake, and Unity Catalog |
+| Data serving | Databricks SQL Warehouse and FastAPI on Azure App Service |
+| Delivery | GitHub Actions CI/CD using OIDC federation to Azure |
+| User interface | HTML / CSS / JavaScript frontend deployed on Vercel |
+
 ---
 
 ## Overview
 
 The **NZ Industry Benchmarking Data Platform** is a portfolio-scale data engineering project built using the **Stats NZ Annual Enterprise Survey (AES): 2025 financial year (provisional)** dataset.
 
-The project implements an end-to-end workflow from raw CSV ingestion to curated analytical data products.
-
-Rather than focusing on a large dashboard, the project demonstrates the engineering practices required to build a reliable and maintainable modern data platform, including:
-
-- Python data ingestion and source validation
-- PySpark transformations
-- Bronze / Silver / Gold Medallion Architecture
-- Delta Lake storage
-- Data quality and contract validation
-- Metadata and data lineage
-- Idempotent and incremental processing
-- Statistical revision handling
-- Industry benchmarking
-- REST API
-- Automated testing
-- GitHub Actions CI
-- Databricks Serverless deployment
+It implements a deployed path from raw CSV ingestion through Bronze, Silver,
+and Gold managed Delta tables to a Databricks SQL-backed API and web frontend.
+The project demonstrates source validation, PySpark transformations, data
+quality and contracts, lineage, idempotent processing, revision handling,
+industry benchmarking, automated testing, and cloud delivery.
 
 The resulting data product enables users to compare financial performance across New Zealand industries, explore historical trends, and identify significant year-over-year changes.
 
@@ -72,48 +75,10 @@ Dataset schema, source information, checksum, dimensions, measures, and known li
 
 ## Architecture
 
-```text
-Stats NZ AES Public Data
-          |
-          v
-   Python Ingestion
-          |
-          v
-     Bronze Delta
-          |
-          v
-   PySpark Validation
-          |
-          v
-     Silver Delta
-          |
-     +----+----+
-     |         |
-     v         v
-Data Quality  Business Rules
- PASS / FAIL       |
-                   v
-              Gold Delta
-                   |
-        +----------+----------+
-        |                     |
-        v                     v
- Metric / Trend        Benchmark Queries
-     Queries                 M4-M6
-        |                     |
-        +----------+----------+
-                   |
-                   v
-                FastAPI
-                   |
-                   v
-             Web Frontend
-```
-
-Databricks execution architecture:
+The verified deployed path is:
 
 ```text
-Unity Catalog Volume
+Stats NZ AES CSV in a Unity Catalog Volume
         |
         v
 Databricks Serverless Job
@@ -122,11 +87,24 @@ Databricks Serverless Job
 Bronze Managed Delta
         |
         v
-Silver Managed Delta
+Silver Managed Delta + Data Quality
         |
         v
 Gold Managed Delta
+        |
+        v
+Databricks SQL Warehouse
+        |
+        v
+FastAPI / Azure App Service
+        |
+        v
+HTML / CSS / JavaScript Frontend / Vercel
 ```
+
+Within the pipeline, Silver preserves source states and validation metadata;
+Gold applies the approved M1-M7 business contract. The API serves existing Gold
+metric, trend, and M4-M6 benchmark results rather than recalculating them.
 
 ---
 
@@ -334,15 +312,18 @@ This allows historical source lineage and revision audit information to remain t
 
 ## REST API
 
-The Gold data product is exposed through a read-only FastAPI application so that the frontend or other applications can consume processed data.
+The Gold data product is exposed through a read-only FastAPI application
+deployed on Azure App Service. In cloud mode, the backend uses
+`databricks-sql-connector` to query the managed Gold table through a Databricks
+SQL Warehouse; it does not require Spark, Delta, or Java in the web runtime.
 
 The API supports:
 
-- Health checks
-- Available industries
-- Annual industry performance
-- Historical trends
-- Benchmark rankings
+- `GET /api/health`
+- `GET /api/industries`
+- `GET /api/industries/{industry}/performance`
+- `GET /api/industries/{industry}/trend`
+- `GET /api/benchmarks`
 
 It provides:
 
@@ -363,6 +344,11 @@ Protected or unavailable observations are represented explicitly, for example:
 
 rather than being incorrectly represented as zero.
 
+Cloud integration was verified against the real Gold data. The deployed API
+returned 2025 financial metrics for Manufacturing (`CC`), and the verified
+routes include health, industry catalogue, performance, trend, and benchmark
+queries.
+
 The complete API contract is documented in:
 
 [`docs/api.md`](docs/api.md)
@@ -371,7 +357,9 @@ The complete API contract is documented in:
 
 ## Web Application
 
-The project includes a lightweight web frontend to demonstrate how the Gold data product can be consumed through the REST API.
+The project includes a lightweight HTML / CSS / JavaScript frontend deployed on
+Vercel. It consumes Gold data only through the FastAPI application and never
+connects directly to Databricks.
 
 Users can:
 
@@ -397,7 +385,8 @@ REST API
 Web Application
 ```
 
-> **Live Demo:** Coming soon
+**Live application:**
+[https://nz-industry-benchmarking.vercel.app/](https://nz-industry-benchmarking.vercel.app/)
 
 ---
 
@@ -432,7 +421,8 @@ An idempotent rerun of the same dataset produced:
 
 This verifies the pipeline's data processing and idempotent behaviour in a Databricks environment.
 
-The Databricks Job is currently triggered manually. Production scheduling and automated cloud deployment are outside the current project scope.
+The Databricks Job is currently triggered manually. Scheduled execution and
+automated Databricks workspace deployment are outside the current project scope.
 
 Detailed Databricks configuration and verification steps are documented in:
 
@@ -454,8 +444,8 @@ The project includes:
 
 Current test coverage includes:
 
-- **89 Python tests**
-- **5 frontend tests**
+- **134 Python tests**
+- **8 frontend tests**
 
 Integration tests validate the processing path:
 
@@ -479,7 +469,7 @@ Tests use synthetic fixtures and temporary Delta paths, so the normal CI suite d
 
 ---
 
-## Continuous Integration
+## Continuous Integration / Deployment
 
 GitHub Actions automatically validates the project on pull requests and pushes to `main`.
 
@@ -503,6 +493,37 @@ CI does not require Databricks credentials or the official Stats NZ CSV.
 
 This keeps source-code validation independent from cloud deployment credentials.
 
+Successful push-triggered CI runs on `main` continue through the API deployment
+workflow:
+
+```text
+Push to main
+      |
+      v
+GitHub Actions CI
+      |
+      v
+Fast backend + Spark / Delta + frontend validation
+      |
+      v
+CI success
+      |
+      v
+deploy-api
+      |
+      v
+GitHub OIDC + Azure managed identity
+      |
+      v
+Azure App Service
+```
+
+The deployment checks out the exact CI-verified commit and builds a
+self-contained Python deployment package from `pyproject.toml`. Azure/Oryx does
+not install from `requirements.txt`. Authentication uses short-lived OIDC
+federation; no Azure client secret, publish profile, or Databricks token is
+stored in GitHub. The Databricks token remains an Azure App Service setting.
+
 ---
 
 ## Technology Stack
@@ -511,15 +532,15 @@ This keeps source-code validation independent from cloud deployment credentials.
 | --- | --- |
 | Programming | Python |
 | Data Processing | PySpark |
-| Data Platform | Databricks |
+| Data Platform | Databricks Free Edition / Serverless |
 | Storage | Delta Lake |
 | Data Catalog | Unity Catalog |
-| Query | SQL / PySpark |
-| API | FastAPI |
+| Query | Databricks SQL Warehouse / PySpark |
+| API | FastAPI / Azure App Service |
 | Testing | pytest |
 | Linting | Ruff |
-| CI | GitHub Actions |
-| Frontend | HTML / CSS / JavaScript |
+| CI/CD | GitHub Actions / GitHub OIDC / Azure Managed Identity |
+| Frontend | HTML / CSS / JavaScript / Vercel |
 | Packaging | Python Wheel |
 | Version Control | Git / GitHub |
 
@@ -566,7 +587,6 @@ Current limitations include:
 - Production scheduling is not configured
 - Production monitoring and alerting infrastructure is not implemented
 - Automated Databricks deployment is not implemented
-- Production cloud deployment of the API and frontend is not yet complete
 - Only one inspected real Stats NZ source release is currently available, so the revision framework has not yet been validated against multiple real revised releases
 
 These limitations are documented explicitly to avoid presenting a portfolio implementation as a production system.
@@ -577,8 +597,6 @@ These limitations are documented explicitly to avoid presenting a portfolio impl
 
 Potential future improvements include:
 
-- Azure-hosted REST API
-- Azure-hosted web frontend
 - Databricks Asset Bundles
 - Automated Databricks deployment
 - Scheduled Databricks Workflows
