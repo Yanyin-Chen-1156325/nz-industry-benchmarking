@@ -118,9 +118,11 @@ details are logged server-side but are not returned to clients.
 ## Storage and concurrency boundary
 
 Routes call a framework-independent application service backed by an
-`AnalyticsRepository` protocol. Production uses `SparkGoldRepository`; tests can
-inject an in-memory fake. The repository reads Gold Delta for financial/trend
-queries and calls the existing `query_benchmarks` function for rankings.
+`AnalyticsRepository` protocol. Local Spark mode uses `SparkGoldRepository`;
+tests can inject an in-memory fake. The Spark repository reads Gold Delta for
+financial/trend queries and calls the existing `query_benchmarks` function for
+rankings. The Azure production configuration selects the Databricks SQL adapter
+described below.
 
 The local API is intended as a portfolio demonstration. It has no write methods,
 authentication, response cache, distributed Spark gateway, or availability SLA.
@@ -149,5 +151,7 @@ must be present or application construction fails with a sanitized error.
 Databricks SQL mode does not initialize or import Spark and is intended for a
 lightweight web runtime without PySpark, Delta, or Java. External authenticated
 SQL connectivity and the 10,842-row managed Gold table were manually verified
-separately; automated tests do not contact Databricks. Azure deployment is not
-complete.
+separately; automated tests do not contact Databricks. The Azure App Service
+deployment workflow and required external configuration are documented in
+[`azure-api-deployment.md`](azure-api-deployment.md); defining the workflow does
+not itself perform a deployment.

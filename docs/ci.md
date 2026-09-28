@@ -6,6 +6,13 @@ The later manually verified Databricks Free Edition wheel deployment is not
 performed by this workflow. No deployment infrastructure or credentials are
 part of Phase 14.
 
+API deployment is kept in the separate `.github/workflows/deploy-api.yml`
+workflow. It is triggered only after this `CI` workflow succeeds for a push to
+`main`, so it consumes the existing validation gate without duplicating the
+Spark/Delta or frontend jobs. See
+[`azure-api-deployment.md`](azure-api-deployment.md) for its packaging, OIDC,
+App Service, and operational configuration.
+
 ## Workflow structure
 
 The workflow has three independent jobs:
